@@ -1,0 +1,746 @@
+# Dont change this file anyone 
+Ravi, this is exactly how a senior engineer would approach it.
+
+I don't want to help you "finish a project." I want to help you build a project that makes people say:
+
+"This looks like a real SaaS product."
+
+I also like your second idea:
+
+Infinite Canvas Mode (like Excalidraw/Figma)
+Document Mode (infinite pages like Word/PDF)
+
+That feature alone makes your project different from most whiteboard clones.
+
+I also checked the project link you shared. Unfortunately, that specific page wasn't accessible through my browsing tools, so I couldn't inspect its contents directly. However, I did review several mature collaborative whiteboard projects and roadmaps, and I'll use the same engineering principles while designing ours.
+
+I want us to work like this
+
+I am NOT ChatGPT for this project.
+
+I am your
+
+Senior Full Stack Engineer + Tech Lead
+
+You are
+
+Software Engineer (Developer)
+
+We'll work exactly like a real software company.
+
+That means
+
+Requirement
+↓
+
+Planning
+
+↓
+
+Architecture
+
+↓
+
+Sprint Planning
+
+↓
+
+Design
+
+↓
+
+Development
+
+↓
+
+Testing
+
+↓
+
+Refactor
+
+↓
+
+Git Commit
+
+↓
+
+Review
+
+↓
+
+Next Sprint
+
+No shortcuts.
+
+I DON'T WANT TO WRITE CODE IMMEDIATELY
+
+This is one mistake juniors make.
+
+Senior developers spend lots of time thinking before coding.
+
+We'll do the same.
+
+Our Project Name
+
+I suggest
+
+SyncBoard
+
+or
+
+DrawFlow
+
+or
+
+BoardX
+
+We'll decide later.
+
+Our Target
+
+Not just
+
+Real Time Whiteboard
+
+Our target is
+
+Professional Collaboration Platform
+
+like
+
+Excalidraw
+Miro
+FigJam
+Google Jamboard
+Canva Whiteboard
+
+combined.
+
+OUR DEVELOPMENT PHILOSOPHY
+
+Every sprint should end with
+
+✅ Working Feature
+
+NOT
+
+"Half completed"
+
+OUR MASTER ROADMAP
+
+This roadmap is fixed.
+
+We won't randomly jump.
+
+PHASE 0
+Product Planning
+
+Duration
+
+1 Sprint
+
+No coding.
+
+Only planning.
+
+Deliverables
+
+Product Requirements
+Feature List
+UI Design
+Folder Structure
+Database
+APIs
+Socket Events
+Component Tree
+PHASE 1
+Project Foundation
+
+We'll create
+
+Repository
+
+↓
+
+Next.js
+
+↓
+
+Node
+
+↓
+
+TypeScript
+
+↓
+
+Tailwind
+
+↓
+
+ESLint
+
+↓
+
+Prettier
+
+↓
+
+Husky
+
+↓
+
+Git
+
+↓
+
+Project Structure
+PHASE 2
+Design System
+
+Professional Design
+
+We'll make
+
+Typography
+
+Spacing
+
+Color Palette
+
+Icons
+
+Animations
+
+Dark Mode
+
+Responsive Layout
+
+No business logic.
+
+PHASE 3
+Authentication
+
+Signup
+
+Login
+
+Google Login
+
+Forgot Password
+
+Session
+
+Protected Routes
+
+Profile
+
+Workspace
+
+PHASE 4
+Dashboard
+
+This itself is a project.
+
+We'll build
+
+Dashboard
+
+Recent Boards
+
+Shared Boards
+
+Templates
+
+Notifications
+
+Search
+
+Workspace
+
+Settings
+
+Trash
+
+Profile
+
+Activity
+PHASE 5
+Whiteboard Engine
+
+This is our biggest module.
+
+We'll spend many sprints here.
+
+Sprint 1
+
+Canvas Layout
+
+Toolbar
+
+Sidebar
+
+Status Bar
+
+Zoom Controls
+
+Mini Map Placeholder
+
+Sprint 2
+
+Drawing Engine
+
+Learn
+
+Canvas
+
+Pointer Events
+
+Coordinates
+
+Rendering
+
+State
+
+History
+
+Sprint 3
+
+Basic Tools
+
+Pen
+
+Eraser
+
+Selection
+
+Hand Tool
+
+Sprint 4
+
+Shapes
+
+Rectangle
+
+Circle
+
+Triangle
+
+Diamond
+
+Arrow
+
+Text
+
+Line
+
+Sprint 5
+
+Advanced Drawing
+
+Pressure
+
+Smooth Curve
+
+Snapping
+
+Alignment
+
+Grid
+
+Guidelines
+
+Sprint 6
+
+Selection System
+
+Bounding Box
+
+Resize
+
+Rotate
+
+Duplicate
+
+Delete
+
+Lock
+
+Group
+
+Ungroup
+
+Sprint 7
+
+Undo Redo
+
+History
+
+Command Pattern
+
+Keyboard Shortcuts
+
+PHASE 6
+Dual Canvas Mode
+
+This is YOUR unique idea.
+
+Mode 1
+
+Infinite Canvas
+
+Like
+
+Excalidraw
+
+Features
+
+Unlimited Zoom
+
+Unlimited Pan
+
+Infinite Space
+
+Mini Map
+
+Mode 2
+
+Document Mode
+
+Like
+
+Google Docs
+
+Features
+
+Page 1
+
+↓
+
+Page 2
+
+↓
+
+Page 3
+
+↓
+
+Page 100
+
+Every page
+
+A4
+
+A3
+
+Letter
+
+Landscape
+
+Portrait
+
+Export
+
+PDF
+
+Print
+
+This mode is ideal for lecture notes, reports, worksheets, and printable documents.
+
+PHASE 7
+Real Time Collaboration
+
+This will take multiple sprints.
+
+Sprint 1
+
+Socket Setup
+
+Sprint 2
+
+Join Room
+
+Sprint 3
+
+Presence
+
+Sprint 4
+
+Cursor Sharing
+
+Sprint 5
+
+Drawing Sync
+
+Sprint 6
+
+Selection Sync
+
+Sprint 7
+
+Undo Sync
+
+Sprint 8
+
+Conflict Handling
+
+Sprint 9
+
+Reconnect
+
+Sprint 10
+
+Offline Queue
+
+PHASE 8
+Database
+
+We'll store
+
+Users
+
+Boards
+
+Pages
+
+Objects
+
+Comments
+
+Invitations
+
+History
+
+Version
+
+Assets
+
+PHASE 9
+Media
+
+Upload
+
+Images
+
+SVG
+
+PDF
+
+Video
+
+Icons
+
+PHASE 10
+Export
+
+PNG
+
+SVG
+
+JSON
+
+PDF
+
+Board Package
+
+PHASE 11
+Comments
+
+Resolve
+
+Mention
+
+Reply
+
+Thread
+
+PHASE 12
+Live Chat
+
+Inside Board
+
+Message
+
+Emoji
+
+Attachments
+
+Typing
+
+PHASE 13
+Video Meeting
+
+Camera
+
+Mic
+
+Screen Share
+
+Recording
+
+Whiteboard
+
+PHASE 14
+AI
+
+Only after everything works.
+
+We'll build
+
+AI Diagram
+
+AI Flowchart
+
+AI UML
+
+AI Sticky Notes
+
+AI OCR
+
+AI Summary
+
+AI Brainstorm
+
+AI Auto Layout
+
+AI Mind Map
+
+PHASE 15
+Performance
+
+Huge Board
+
+10000 Objects
+
+Virtual Rendering
+
+Object Pool
+
+Chunk Rendering
+
+Caching
+
+PHASE 16
+Production
+
+Redis
+
+Docker
+
+CI/CD
+
+Monitoring
+
+Rate Limiting
+
+Compression
+
+Security
+
+CDN
+
+WHAT I WILL GIVE YOU IN EVERY SPRINT
+
+Every sprint I'll provide:
+
+1
+
+Sprint Goal
+
+2
+
+Theory
+
+3
+
+Architecture
+
+4
+
+Folder Structure
+
+5
+
+Database
+
+(if needed)
+
+6
+
+Frontend Structure
+
+7
+
+Backend Structure
+
+8
+
+Socket Events
+
+9
+
+API Design
+
+10
+
+UI Design
+
+11
+
+Prompt
+
+If you want to use Cursor, Claude Code, Gemini CLI, Codex, or another coding AI to scaffold a module, I'll write a professional prompt for that sprint.
+
+12
+
+Then
+
+We'll code together.
+
+I'll review your code.
+
+We'll improve it.
+
+Refactor it.
+
+Make it production ready.
+
+OUR PROJECT WILL HAVE DOCUMENTATION FROM DAY ONE
+docs/
+
+01-product-requirements.md
+
+02-system-architecture.md
+
+03-folder-structure.md
+
+04-database.md
+
+05-api.md
+
+06-socket-events.md
+
+07-ui-guidelines.md
+
+08-coding-standards.md
+
+09-deployment.md
+
+10-performance.md
+One more proposal
+
+I think we should create a Project Bible before writing the first line of code.
+
+This will be a single master document (around 80–120 pages by the end of the project) that contains every architectural decision, sprint plan, API contract, database schema, UI flow, and engineering guideline. Throughout development, we'll keep updating it so it becomes the complete reference for the project.
+
+I believe this will make our collaboration much smoother than jumping straight into coding.
+
+I also have a few improvements I'd like to introduce that will make your project even stronger than typical collaborative whiteboards:
+
+A plugin-ready tool architecture so adding new drawing tools doesn't require changing the core canvas engine.
+Separate rendering, interaction, and synchronization layers to keep the codebase maintainable as features grow.
+A unified object model so both Infinite Canvas Mode and Document Mode share the same drawing engine instead of maintaining two separate implementations.
+A versioned synchronization protocol to make future features like offline editing and board history easier to implement.
+
+I think this project can become one of the strongest portfolio pieces you've built, and I'll help you approach it with the same discipline and planning used on real engineering teams.
