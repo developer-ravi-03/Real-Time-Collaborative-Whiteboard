@@ -1,50 +1,52 @@
-# Socket Development
+# Socket.IO Development
 
 > **Project:** SyncBoard
-> **Document:** Socket Development
+> **Document:** Socket.IO Development
 > **Phase:** 10 - Development
-> **Version:** 1.0
+> **Version:** 2.0
+> **Status:** Final (Architecture Frozen)
 
 ---
 
 # 1. Overview
 
-This document defines the Socket.IO implementation standards used throughout SyncBoard.
+This document defines the realtime communication architecture for SyncBoard.
 
-The socket layer enables low-latency communication between connected clients and powers:
+SyncBoard uses **Socket.IO** with **Node.js**, **Express.js**, and **TypeScript** to provide realtime collaboration across the application.
 
-- Live collaboration
-- Presence indicators
-- Cursor sharing
-- Shape synchronization
-- Comment synchronization
+Socket.IO powers collaborative features such as:
+
+- Live Whiteboard
+- Live Cursor
+- User Presence
+- Live Chat
+- Shape Synchronization
 - Notifications
-- Activity updates
-
-The socket infrastructure should remain modular, scalable, and secure.
+- Board Activity
 
 ---
 
 # 2. Objectives
 
-After implementing this module, SyncBoard should support:
+After implementing this module, the backend should support:
 
-- Secure socket connections
-- Authenticated clients
-- Workspace rooms
-- Board rooms
-- Event acknowledgements
+- Low latency communication
+- Room-based collaboration
+- User presence
+- Live cursor movement
+- Shape synchronization
+- Realtime chat
+- Notifications
+- Connection recovery
 - Automatic reconnection
-- Error handling
-- Event versioning
-- Scalable architecture
+- Scalable event architecture
 
 ---
 
 # 3. Architecture
 
 ```
-Client
+Next.js Client
 
 ↓
 
@@ -52,126 +54,273 @@ Socket.IO Client
 
 ↓
 
+Express.js Server
+
+↓
+
 Socket.IO Server
 
 ↓
 
-Socket Manager
+Socket Middleware
 
 ↓
 
-Event Handlers
+Socket Controllers
 
 ↓
 
-Services
+Socket Services
 
 ↓
 
-Repositories
+Prisma ORM
 
 ↓
 
-Database
+PostgreSQL
 ```
 
-Business logic should never exist directly inside socket event handlers.
+Realtime communication is completely independent of the REST API layer.
 
 ---
 
 # 4. Folder Structure
 
 ```
+backend/
+
 src/
 
-socket/
-
-server.ts
-
-client.ts
+sockets/
 
 index.ts
 
-events/
-
 handlers/
 
-middleware/
+board.handler.ts
+
+cursor.handler.ts
+
+chat.handler.ts
+
+presence.handler.ts
+
+notification.handler.ts
 
 rooms/
 
-utils/
+middlewares/
+
+events/
 
 types/
 ```
 
-Separate infrastructure from application logic.
+---
+
+# 5. Responsibilities
+
+### Socket Server
+
+Responsible for:
+
+- Managing connections
+- Registering events
+- Broadcasting updates
+- Managing rooms
 
 ---
 
-# 5. Socket Server Initialization
+### Socket Middleware
 
-Responsibilities:
+Responsible for:
 
-- Initialize Socket.IO
-- Configure CORS
-- Register middleware
-- Register event handlers
-- Start heartbeat
-- Handle disconnects
-
-The server should be initialized once during application startup.
+- Authentication
+- Authorization
+- Logging
+- Validation
+- Rate limiting
 
 ---
 
-# 6. Socket Client
+### Socket Handlers
 
-Client responsibilities:
+Responsible for:
 
-- Establish connection
-- Authenticate
-- Join rooms
-- Listen for events
-- Emit actions
-- Reconnect automatically
+- Receiving events
+- Calling services
+- Sending responses
 
-The client should expose a reusable singleton instance.
+Business logic should never exist inside socket handlers.
 
 ---
 
-# 7. Authentication
+### Socket Services
 
-Authentication flow:
+Responsible for:
+
+- Board synchronization
+- Cursor synchronization
+- Chat logic
+- Notifications
+- User presence
+
+---
+
+# 6. Authentication
+
+Connection Flow
 
 ```
 Client
 
 ↓
 
-Clerk Session Token
+Clerk JWT
 
 ↓
 
-Socket Handshake
+Socket.IO Handshake
 
 ↓
 
-Verify Token
+JWT Verification
 
 ↓
 
-Attach User Context
-
-↓
-
-Connection Accepted
+Authenticated Socket
 ```
 
-Reject unauthenticated connections immediately.
+Unauthenticated sockets must be rejected immediately.
 
 ---
 
-# 8. Connection Lifecycle
+# 7. Authorization
+
+Verify:
+
+- Workspace membership
+- Board membership
+- User permissions
+- Room access
+
+Every event must verify permissions before execution.
+
+---
+
+# 8. Rooms
+
+Each collaborative resource uses its own room.
+
+Examples
+
+```
+workspace:{workspaceId}
+
+board:{boardId}
+
+chat:{boardId}
+```
+
+Users only receive events from rooms they have joined.
+
+---
+
+# 9. Supported Events
+
+Client → Server
+
+```
+board:join
+
+board:leave
+
+shape:create
+
+shape:update
+
+shape:delete
+
+cursor:move
+
+chat:send
+
+notification:read
+```
+
+---
+
+Server → Client
+
+```
+board:joined
+
+board:left
+
+shape:created
+
+shape:updated
+
+shape:deleted
+
+cursor:update
+
+chat:received
+
+notification:new
+```
+
+---
+
+# 10. Event Naming
+
+Use namespaces.
+
+Examples
+
+```
+board:create
+
+board:update
+
+board:delete
+
+cursor:move
+
+chat:send
+
+notification:new
+```
+
+Avoid generic event names like:
+
+```
+update
+
+send
+
+data
+```
+
+---
+
+# 11. Payload Validation
+
+Every socket event must be validated using **Zod**.
+
+Validate:
+
+- Event payload
+- IDs
+- Coordinates
+- Shape data
+
+Reject invalid payloads before reaching services.
+
+---
+
+# 12. Connection Lifecycle
 
 ```
 Connect
@@ -190,10 +339,6 @@ Exchange Events
 
 ↓
 
-Heartbeat
-
-↓
-
 Disconnect
 
 ↓
@@ -201,309 +346,202 @@ Disconnect
 Reconnect
 ```
 
-The lifecycle should be predictable and fault tolerant.
+Handle unexpected disconnections gracefully.
 
 ---
 
-# 9. Room Management
+# 13. Broadcasting Strategy
 
-Supported room types:
+Use:
 
 ```
-workspace:{workspaceId}
+socket.emit()
 
-board:{boardId}
+socket.broadcast.emit()
+
+io.to(room).emit()
+
+socket.to(room).emit()
 ```
 
-Users may belong to multiple workspace rooms but only active board rooms as required.
+Choose the appropriate broadcasting method depending on the event.
 
 ---
 
-# 10. Event Registration
+# 14. User Presence
 
-Organize events by module.
+Track:
 
-Examples:
+- Online users
+- Active board
+- Current workspace
+- Last activity
+- Typing status
 
-```
-board.events.ts
-
-shape.events.ts
-
-comment.events.ts
-
-notification.events.ts
-
-presence.events.ts
-```
-
-Avoid registering all events in a single file.
+Presence should update automatically.
 
 ---
 
-# 11. Event Naming
+# 15. Cursor Synchronization
 
-Use consistent namespaced events.
+Broadcast:
 
-Examples:
+- Cursor X
+- Cursor Y
+- User ID
+- User Color
 
-```
-board:join
-
-board:leave
-
-shape:create
-
-shape:update
-
-shape:delete
-
-comment:create
-
-cursor:move
-
-notification:new
-```
-
-Event names should remain stable.
+Cursor updates should be lightweight and frequent.
 
 ---
 
-# 12. Event Acknowledgements
+# 16. Shape Synchronization
 
-Critical events should use acknowledgements.
+Supported operations
 
-Example flow:
+- Create
+- Update
+- Delete
+- Move
+- Resize
+- Rotate
 
-```
-Client
-
-↓
-
-Emit Event
-
-↓
-
-Server Processes
-
-↓
-
-Success
-
-↓
-
-Acknowledgement Returned
-```
-
-Clients can retry if no acknowledgement is received.
+All updates should be propagated to connected users in realtime.
 
 ---
 
-# 13. Middleware
+# 17. Chat
 
-Socket middleware responsibilities:
+Support:
 
-- Authentication
-- Authorization
-- Rate limiting
-- Payload validation
-- Logging
+- Send message
+- Edit message
+- Delete message
+- Typing indicator
+- Read receipts
 
-Every incoming event should pass through middleware.
-
----
-
-# 14. Error Handling
-
-Return structured socket errors.
-
-Example:
-
-```json
-{
-  "code": "UNAUTHORIZED",
-  "message": "Authentication required."
-}
-```
-
-Never expose internal implementation details.
+Messages should be persisted using PostgreSQL.
 
 ---
 
-# 15. Heartbeats
+# 18. Notifications
 
-Use heartbeat intervals to:
+Realtime notifications for:
 
-- Detect stale connections
-- Remove inactive users
-- Maintain presence accuracy
+- Board invitations
+- Comments
+- Mentions
+- Workspace updates
 
-Heartbeat intervals should balance responsiveness and network usage.
-
----
-
-# 16. Reconnection
-
-Client strategy:
-
-```
-Disconnect
-
-↓
-
-Retry
-
-↓
-
-Reconnect
-
-↓
-
-Authenticate
-
-↓
-
-Rejoin Rooms
-
-↓
-
-Request Latest State
-```
-
-Use exponential backoff to avoid reconnect storms.
+Notifications should also be stored in the database.
 
 ---
 
-# 17. Logging
+# 19. Error Handling
+
+Handle:
+
+- Invalid payload
+- Unauthorized access
+- Forbidden actions
+- Database failures
+- Unexpected exceptions
+
+Return structured error events.
+
+---
+
+# 20. Logging
 
 Log:
 
 - Connections
 - Disconnections
-- Failed authentication
+- Authentication failures
 - Room joins
 - Room leaves
-- Critical event failures
+- Critical socket errors
 
-Avoid logging sensitive payload data.
-
----
-
-# 18. Performance
-
-Optimize by:
-
-- Broadcasting only to relevant rooms
-- Compressing large payloads
-- Debouncing cursor updates
-- Batching frequent events
-- Reusing socket instances
-
-Do not broadcast globally unless absolutely necessary.
+Never log sensitive information.
 
 ---
 
-# 19. Scalability
+# 21. Monitoring
 
-Future scaling strategy:
+Track:
 
-```
-Socket.IO
+- Active connections
+- Concurrent users
+- Event throughput
+- Event latency
+- Failed events
+- Reconnection rate
 
-↓
-
-Redis Adapter
-
-↓
-
-Multiple Node Servers
-
-↓
-
-Load Balancer
-```
-
-Sticky sessions should be configured when scaling horizontally.
+These metrics help identify realtime bottlenecks.
 
 ---
 
-# 20. Security
+# 22. Security
 
-- Authenticate every connection.
-- Authorize every event.
-- Validate payloads with Zod.
-- Apply rate limiting.
-- Prevent unauthorized room joins.
-- Disconnect malicious clients.
-
-Never trust client-provided identifiers.
+- Authenticate every socket
+- Validate every payload
+- Verify room access
+- Prevent event spam
+- Apply rate limiting
+- Disconnect malicious clients
 
 ---
 
-# 21. Testing
+# 23. Testing
 
 Verify:
 
-- Connection establishment
+- Connection
 - Authentication
+- Authorization
 - Room joining
-- Event acknowledgements
+- Shape synchronization
+- Cursor synchronization
+- Chat
+- Notifications
 - Reconnection
-- Presence updates
-- Broadcast behavior
-- Unauthorized access
-- High concurrency
+- Performance
 
 ---
 
-# 22. Debugging
+# 24. Best Practices
 
-Monitor:
-
-- Active sockets
-- Room membership
-- Event frequency
-- Failed events
-- Connection duration
-- Reconnection attempts
-
-Structured logging simplifies troubleshooting.
+- Keep handlers thin.
+- Put business logic in services.
+- Validate every event.
+- Authenticate every connection.
+- Broadcast only required data.
+- Avoid large payloads.
+- Use rooms efficiently.
 
 ---
 
-# 23. Best Practices
-
-- Keep socket handlers lightweight.
-- Delegate business logic to services.
-- Use namespaces consistently.
-- Broadcast only necessary events.
-- Keep payloads compact.
-- Version event contracts if breaking changes occur.
-
----
-
-# 24. Verification Checklist
+# 25. Verification Checklist
 
 Before proceeding:
 
-- Socket server initialized
-- Client configured
+- Socket.IO server configured
 - Authentication working
-- Middleware implemented
-- Rooms working
-- Event handlers registered
-- Reconnection verified
-- Logging enabled
-- Performance targets achieved
+- Room management implemented
+- Event validation implemented
+- Handlers implemented
+- Services implemented
+- Logging configured
+- Monitoring configured
+- Tests passing
 
 ---
 
-# 25. Expected Outcome
+# 26. Expected Outcome
 
 At the end of this module:
 
-- SyncBoard has a production-ready Socket.IO infrastructure.
-- Connections are authenticated and secure.
-- Events are modular and maintainable.
-- The socket layer is scalable for future Redis-based horizontal deployment.
-- The project is ready to implement database access with Prisma.
+- SyncBoard supports reliable realtime collaboration.
+- Events are secure, validated, and scalable.
+- Business logic is isolated in services.
+- Socket communication integrates cleanly with the Express.js backend.

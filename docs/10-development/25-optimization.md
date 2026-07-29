@@ -3,7 +3,8 @@
 > **Project:** SyncBoard
 > **Document:** Optimization
 > **Phase:** 10 - Development
-> **Version:** 1.0
+> **Version:** 2.0
+> **Status:** Final (Architecture Frozen)
 
 ---
 
@@ -11,31 +12,34 @@
 
 This document defines the optimization strategy for SyncBoard.
 
-The objective is to provide:
+Optimization focuses on:
 
-- Fast page loads
-- Smooth realtime collaboration
-- Efficient database access
-- Low network usage
-- Responsive UI
-- Scalable backend performance
+- Frontend Performance
+- Backend Performance
+- Database Performance
+- Network Efficiency
+- Realtime Communication
+- Scalability
+- Memory Usage
+- Build Performance
 
-Optimization should be driven by measurable performance metrics rather than assumptions.
+Every optimization should improve user experience without sacrificing maintainability.
 
 ---
 
 # 2. Objectives
 
-After implementing this module, SyncBoard should achieve:
+After implementing this document, SyncBoard should provide:
 
-- Fast initial page load
-- Optimized rendering
-- Efficient API responses
-- Optimized database queries
+- Fast page loads
+- Responsive UI
+- Low API latency
+- Efficient database queries
+- Smooth realtime collaboration
 - Reduced bundle size
-- Efficient Socket.IO communication
-- Intelligent caching
-- High Lighthouse scores
+- Optimized rendering
+- Scalable backend
+- Efficient caching
 
 ---
 
@@ -46,31 +50,15 @@ User
 
 ↓
 
-Browser
+Next.js Frontend
 
 ↓
 
-Next.js
+Express.js API
 
 ↓
 
-React
-
-↓
-
-API
-
-↓
-
-Service
-
-↓
-
-Repository
-
-↓
-
-Prisma
+Prisma ORM
 
 ↓
 
@@ -78,14 +66,10 @@ PostgreSQL
 
 ↓
 
-Cloudinary
-
-↓
-
-CDN
+Socket.IO
 ```
 
-Performance should be considered at every layer.
+Each layer should be optimized independently.
 
 ---
 
@@ -93,15 +77,13 @@ Performance should be considered at every layer.
 
 Optimize:
 
-- Component rendering
-- State updates
-- Network requests
-- Bundle size
+- Initial Load Time
+- Rendering Performance
+- Bundle Size
 - Images
 - Fonts
-- Navigation
-
-Avoid unnecessary re-renders.
+- Animations
+- API Requests
 
 ---
 
@@ -109,306 +91,269 @@ Avoid unnecessary re-renders.
 
 Use:
 
-- React.memo
-- useMemo
-- useCallback
-- Lazy Components
+- React.memo()
+- useMemo()
+- useCallback()
+- Lazy Loading
 - Dynamic Imports
 
-Avoid premature optimization—measure first.
+Avoid unnecessary re-renders.
 
 ---
 
 # 6. Next.js Optimization
 
-Leverage:
+Use:
 
 - App Router
-- Server Components
-- Streaming
-- Route Groups
-- Partial Prerendering (where appropriate)
-- Dynamic Metadata
-
-Use Client Components only when browser APIs or interactivity are required.
+- Route-based Code Splitting
+- Dynamic Imports
+- Image Optimization
+- Font Optimization
+- Static Assets
 
 ---
 
-# 7. Data Fetching
+# 7. Bundle Optimization
 
-Use React Query for:
+Reduce JavaScript bundle size by:
 
-- Server caching
-- Background refetching
-- Request deduplication
-- Optimistic updates
-
-Keep stale times appropriate for each resource.
-
----
-
-# 8. Code Splitting
-
-Split code by:
-
-- Routes
-- Feature modules
-- Heavy components
-- Rich editors
-- Dashboard widgets
-
-Load code only when required.
-
----
-
-# 9. Bundle Optimization
-
-Reduce bundle size by:
-
-- Tree shaking
-- Dynamic imports
 - Removing unused dependencies
-- Importing only required modules
+- Tree Shaking
+- Dynamic Imports
+- Lazy Components
 
-Analyze bundle size regularly.
+Regularly analyze bundle size.
 
 ---
 
-# 10. Image Optimization
+# 8. Image Optimization
 
 Use:
 
-- Next.js Image
-- Cloudinary transformations
-- Responsive images
-- Lazy loading
-- Modern formats (WebP, AVIF)
+- next/image
+- WebP
+- Lazy Loading
+- Responsive Images
 
-Avoid serving original high-resolution images.
-
----
-
-# 11. Font Optimization
-
-Recommendations:
-
-- Self-host fonts where practical
-- Preload critical fonts
-- Limit font families
-- Limit font weights
-
-Reduce layout shifts caused by font loading.
+Compress assets before upload.
 
 ---
 
-# 12. API Optimization
+# 9. Font Optimization
 
-Improve APIs by:
+Use:
 
-- Returning only required fields
+- next/font
+- Local Fonts where appropriate
+- Font Display Swap
+
+Avoid loading unnecessary font weights.
+
+---
+
+# 10. API Optimization
+
+Optimize Express APIs by:
+
+- Returning only required data
+- Enabling compression
 - Pagination
 - Filtering
-- Compression
-- Response caching
+- Sorting
+- Proper HTTP status codes
+- Response caching (future)
 
 Avoid over-fetching.
 
 ---
 
-# 13. Database Optimization
+# 11. Database Optimization
 
-Optimize:
+Optimize PostgreSQL by:
 
-- Indexes
-- Query plans
+- Proper indexing
+- Query optimization
 - Pagination
-- Transactions
 - Connection pooling
+- Transactions
+- Efficient schema design
 
-Prevent N+1 query issues.
-
----
-
-# 14. Prisma Optimization
-
-Best practices:
-
-- Use `select`
-- Use `include` carefully
-- Batch related operations
-- Minimize nested queries
-
-Review slow queries regularly.
+Avoid unnecessary joins.
 
 ---
 
-# 15. Socket.IO Optimization
+# 12. Prisma Optimization
 
-Optimize by:
+Use:
 
-- Broadcasting to rooms only
-- Compressing payloads
-- Debouncing cursor updates
-- Batching rapid events
-- Limiting event frequency
+- select
+- include only when necessary
+- Transactions
+- Batch operations
 
-Keep realtime payloads compact.
+Avoid:
+
+- N+1 queries
+- Large nested includes
+- Repeated identical queries
+
+---
+
+# 13. Socket.IO Optimization
+
+Optimize realtime communication by:
+
+- Broadcasting only necessary events
+- Small payloads
+- Room-based communication
+- Event throttling
+- Efficient reconnection
+
+Avoid sending complete board data for every update.
+
+---
+
+# 14. State Management Optimization
+
+Optimize Zustand by:
+
+- Small focused stores
+- Selectors
+- Shallow comparisons
+
+Avoid one giant global store.
+
+---
+
+# 15. Canvas Optimization
+
+Optimize Konva by:
+
+- Layer separation
+- Object virtualization
+- Batch drawing
+- Redraw only changed elements
+- Shape caching
+
+Essential for large whiteboards.
 
 ---
 
 # 16. Caching Strategy
 
-Cache:
+Future caching layers:
 
-- User settings
-- Dashboard summaries
-- Search suggestions
-- Static assets
-- API responses where appropriate
+- Browser Cache
+- API Cache
+- CDN Cache
+- Redis Cache
 
-Future:
-
-- Redis distributed cache
+Cache only non-sensitive data.
 
 ---
 
-# 17. Lazy Loading
+# 17. Network Optimization
 
-Lazy load:
+Reduce network overhead by:
 
-- Images
-- Dashboard widgets
-- Modals
-- Heavy editors
-- Analytics
-- Settings panels
-
-Improve initial page responsiveness.
-
----
-
-# 18. Virtualization
-
-Use virtualization for:
-
-- Long board lists
-- Activity feeds
-- Notifications
-- Search results
-- Member lists
-
-Recommended libraries:
-
-- TanStack Virtual
-- react-window (if needed)
-
----
-
-# 19. Network Optimization
-
-Reduce network usage by:
-
-- HTTP compression
+- Compression
+- Minification
+- HTTP/2
+- Lazy requests
 - Request batching
-- CDN caching
-- Optimized JSON payloads
 
-Avoid duplicate requests.
+Minimize unnecessary API calls.
 
 ---
 
-# 20. Performance Budgets
+# 18. Memory Optimization
 
-Recommended targets:
+Prevent memory leaks by:
 
-| Metric                   | Goal               |
-| ------------------------ | ------------------ |
-| First Contentful Paint   | < 1.8 s            |
-| Largest Contentful Paint | < 2.5 s            |
-| Time to Interactive      | < 3.5 s            |
-| Cumulative Layout Shift  | < 0.1              |
-| Initial JS Bundle        | < 250 KB (gzipped) |
+- Cleaning event listeners
+- Closing socket connections
+- Clearing timers
+- Destroying unused objects
 
-Review budgets periodically as features grow.
+Monitor memory usage regularly.
 
 ---
 
-# 21. Profiling
-
-Regularly profile:
-
-- React rendering
-- API latency
-- Database queries
-- Socket event frequency
-- Memory usage
-
-Use profiling results to prioritize optimization work.
-
----
-
-# 22. Monitoring
+# 19. Performance Monitoring
 
 Track:
 
-- API response times
-- Database query duration
-- Cache hit rate
-- Bundle size
-- Lighthouse scores
-- Web Vitals
-- Socket latency
-
-Establish alerts for performance regressions.
+- Page Load Time
+- Largest Contentful Paint (LCP)
+- First Input Delay (FID)
+- Cumulative Layout Shift (CLS)
+- API Latency
+- Database Query Time
+- Socket Latency
 
 ---
 
-# 23. Testing
+# 20. Load Testing
 
-Verify:
+Verify performance under:
 
-- Large workspaces
+- Multiple users
 - Large boards
-- Multiple concurrent users
-- High-frequency socket events
-- Slow network conditions
-- Mobile performance
+- High API traffic
+- High socket traffic
 
-Test under realistic production-like workloads.
+Benchmark before production releases.
 
 ---
 
-# 24. Best Practices
+# 21. Security vs Performance
 
-- Optimize based on profiling.
-- Avoid unnecessary abstractions.
-- Keep payloads small.
-- Cache strategically.
-- Virtualize long lists.
-- Measure before and after every optimization.
+Balance:
+
+- Encryption
+- Authentication
+- Validation
+- Rate Limiting
+
+Never sacrifice security solely for performance gains.
 
 ---
 
-# 25. Verification Checklist
+# 22. Best Practices
+
+- Optimize only after measuring.
+- Profile before refactoring.
+- Cache wisely.
+- Keep bundles small.
+- Optimize database queries.
+- Reduce unnecessary renders.
+- Keep socket payloads lightweight.
+- Continuously monitor performance.
+
+---
+
+# 23. Verification Checklist
 
 Before proceeding:
 
 - Bundle analyzed
-- React rendering optimized
-- Queries reviewed
-- Indexes verified
 - Images optimized
-- Lazy loading implemented
-- Socket traffic optimized
-- Performance budgets met
+- Fonts optimized
+- API response time acceptable
+- Database queries optimized
+- Prisma queries reviewed
+- Socket events optimized
+- Memory leaks checked
+- Performance metrics monitored
 
 ---
 
-# 26. Expected Outcome
+# 24. Expected Outcome
 
 At the end of this module:
 
-- SyncBoard delivers a fast and responsive experience across devices.
-- Frontend, backend, database, and realtime systems are optimized for scale.
-- Performance metrics are measurable and continuously monitored.
-- The project is ready for comprehensive security hardening.
+- SyncBoard delivers a fast and responsive experience.
+- Frontend, backend, database, and realtime layers are optimized independently.
+- Performance remains stable as the application scales.
+- The architecture is prepared for production workloads.

@@ -3,15 +3,18 @@
 > **Project:** SyncBoard
 > **Document:** API Development
 > **Phase:** 10 - Development
-> **Version:** 1.0
+> **Version:** 2.0
+> **Status:** Final (Architecture Frozen)
 
 ---
 
 # 1. Overview
 
-This document defines the API development standards for SyncBoard.
+This document defines the API development standards for the SyncBoard backend.
 
-All backend APIs must follow a consistent architecture, naming convention, request/response format, validation strategy, and security model.
+The backend is built using **Node.js**, **Express.js**, **TypeScript**, **Prisma ORM**, and **PostgreSQL**.
+
+All APIs must follow a consistent architecture, naming convention, request/response format, validation strategy, logging, monitoring, and security practices.
 
 The API layer acts as the bridge between the frontend and the business logic implemented in the Service Layer.
 
@@ -33,17 +36,20 @@ After implementing this document, the backend should provide:
 - API versioning
 - Logging
 - Monitoring
+- Scalable architecture
 
 ---
 
-# 3. Architecture
+# 3. Backend Architecture
+
+SyncBoard follows a **Layered (Clean) Architecture**.
 
 ```
-Client
+Client (Next.js)
 
 ↓
 
-API Route
+Express Router
 
 ↓
 
@@ -51,7 +57,7 @@ Middleware
 
 ↓
 
-Validation
+Validation (Zod)
 
 ↓
 
@@ -67,40 +73,202 @@ Repository
 
 ↓
 
-Database
+Prisma ORM
+
+↓
+
+PostgreSQL
 ```
 
-Business logic should never exist inside API routes.
+### Layer Responsibilities
+
+### Express Router
+
+- Defines API endpoints
+- Maps routes to controllers
+- Registers middleware
 
 ---
 
-# 4. API Folder Structure
+### Middleware
+
+Responsible for:
+
+- Authentication
+- Authorization
+- Logging
+- Error handling
+- Rate limiting
+- Request parsing
+
+---
+
+### Validation
+
+Validate:
+
+- Request Body
+- Query Parameters
+- Route Parameters
+- Headers (where required)
+
+Only valid requests reach the controller.
+
+---
+
+### Controller
+
+Responsible for:
+
+- Receiving requests
+- Calling services
+- Returning HTTP responses
+
+Controllers must never contain business logic.
+
+---
+
+### Service
+
+Contains all business logic.
+
+Examples:
+
+- Create Workspace
+- Create Board
+- Invite User
+- Delete Shape
+- Move Objects
+- Share Board
+
+---
+
+### Repository
+
+Responsible only for database operations.
+
+Uses Prisma to communicate with PostgreSQL.
+
+Repositories must never contain business rules.
+
+---
+
+### Prisma ORM
+
+Provides:
+
+- Type-safe queries
+- Migrations
+- Database access
+- Transactions
+
+---
+
+### PostgreSQL
+
+Stores:
+
+- Users
+- Workspaces
+- Boards
+- Shapes
+- Comments
+- Notifications
+- Activity Logs
+
+Business logic should never exist inside routes or controllers.
+
+---
+
+# 4. Backend Folder Structure
 
 ```
+backend/
+
 src/
 
-app/
+config/
 
-api/
+controllers/
 
-workspace/
+routes/
 
-board/
+services/
 
-shape/
+repositories/
 
-comment/
+middleware/
 
-notification/
+validations/
 
-search/
+sockets/
 
-settings/
+types/
 
-dashboard/
+utils/
+
+constants/
+
+prisma/
+
+server.ts
 ```
 
-Each module owns its own API routes.
+### Folder Responsibilities
+
+**config/**
+
+- Environment
+- Database
+- Application configuration
+
+**controllers/**
+
+- HTTP request handlers
+
+**routes/**
+
+- API route definitions
+
+**services/**
+
+- Business logic
+
+**repositories/**
+
+- Database access
+
+**middleware/**
+
+- Authentication
+- Authorization
+- Logging
+- Error handling
+
+**validations/**
+
+- Zod schemas
+
+**sockets/**
+
+- Socket.IO events
+- Rooms
+- Presence
+- Realtime collaboration
+
+**types/**
+
+- Shared TypeScript types
+
+**utils/**
+
+- Helper functions
+
+**constants/**
+
+- Enums
+- Messages
+- API constants
 
 ---
 
@@ -108,41 +276,29 @@ Each module owns its own API routes.
 
 Create
 
-```
 POST
-```
 
 Read
 
-```
 GET
-```
 
 Update
 
-```
 PATCH
-```
 
 Delete
 
-```
 DELETE
-```
 
-Avoid using verbs in endpoint names.
+Avoid verbs in endpoint names.
 
 ✅ Good
 
-```
-POST /api/boards
-```
+POST /api/v1/boards
 
 ❌ Bad
 
-```
-POST /api/createBoard
-```
+POST /api/v1/createBoard
 
 ---
 
@@ -152,29 +308,25 @@ Use plural resources.
 
 Examples
 
-```
-/api/workspaces
+/api/v1/workspaces
 
-/api/boards
+/api/v1/boards
 
-/api/comments
+/api/v1/comments
 
-/api/users
-```
+/api/v1/users
 
 Nested resources
 
-```
-/api/workspaces/:workspaceId/boards
+/api/v1/workspaces/:workspaceId/boards
 
-/api/boards/:boardId/comments
-```
+/api/v1/boards/:boardId/comments
 
 ---
 
 # 7. Request Validation
 
-Every request must be validated using Zod.
+Every request must be validated using **Zod**.
 
 Validate:
 
@@ -183,7 +335,7 @@ Validate:
 - Params
 - Headers (where required)
 
-Reject invalid requests before reaching the Service Layer.
+Reject invalid requests before reaching the Controller.
 
 ---
 
@@ -192,11 +344,19 @@ Reject invalid requests before reaching the Service Layer.
 Protected APIs require:
 
 ```
+Client
+
+↓
+
 Clerk Authentication
 
 ↓
 
-Session Validation
+JWT Token
+
+↓
+
+Express Authentication Middleware
 
 ↓
 
@@ -205,9 +365,7 @@ Authenticated User
 
 Unauthenticated requests return:
 
-```
 401 Unauthorized
-```
 
 ---
 
@@ -220,7 +378,7 @@ Verify:
 - User ownership
 - Role permissions
 
-Authorization belongs in the Service Layer.
+Authorization is implemented inside the Service Layer.
 
 ---
 
@@ -235,13 +393,13 @@ Example
 }
 ```
 
-Use JSON for request bodies unless uploading files.
+Use JSON unless uploading files.
 
 ---
 
 # 11. Response Format
 
-Successful response:
+Successful response
 
 ```json
 {
@@ -251,7 +409,7 @@ Successful response:
 }
 ```
 
-Error response:
+Error response
 
 ```json
 {
@@ -263,15 +421,12 @@ Error response:
 }
 ```
 
-Keep the response structure consistent across all endpoints.
+All APIs must return a consistent response structure.
 
 ---
 
 # 12. HTTP Status Codes
 
-Common status codes:
-
-```
 200 OK
 
 201 Created
@@ -293,23 +448,18 @@ Common status codes:
 429 Too Many Requests
 
 500 Internal Server Error
-```
-
-Use status codes according to HTTP semantics.
 
 ---
 
 # 13. Pagination
 
-Support:
+Support
 
-```
 ?page=1
 
 &limit=20
-```
 
-Response example:
+Response
 
 ```json
 {
@@ -323,62 +473,54 @@ Response example:
 }
 ```
 
-Future support:
+Future support
 
-- Cursor-based pagination
+- Cursor Pagination
 
 ---
 
 # 14. Filtering
 
-Examples:
+Examples
 
-```
 ?status=active
 
 ?role=owner
 
 ?workspace=abc123
-```
-
-Multiple filters may be combined.
 
 ---
 
 # 15. Sorting
 
-Examples:
+Examples
 
-```
 ?sort=createdAt
 
 ?order=desc
-```
 
-Supported sorting:
+Supported fields
 
 - Created Date
 - Updated Date
 - Name
-- Relevance (Search)
+- Relevance
 
 ---
 
 # 16. API Versioning
 
-Current version:
+Current version
 
-```
 v1
-```
 
-Example:
+Examples
 
-```
 /api/v1/workspaces
-```
 
-Future versions should not break existing clients.
+/api/v1/boards
+
+Future versions must remain backward compatible whenever possible.
 
 ---
 
@@ -386,30 +528,32 @@ Future versions should not break existing clients.
 
 Protect APIs against abuse.
 
-Suggested limits:
+Apply limits to
 
-- Authentication endpoints
-- Search endpoints
-- File uploads
+- Authentication
+- Search
+- File Upload
 - Public APIs
 
-Future implementation may use Redis.
+Future implementation:
+
+- Redis
+- express-rate-limit
 
 ---
 
 # 18. Error Handling
 
-Centralize error handling.
+Centralized Express Error Middleware handles:
 
-Handle:
+- Validation Errors
+- Authentication Errors
+- Authorization Errors
+- Prisma Errors
+- Database Errors
+- Unexpected Exceptions
 
-- Validation errors
-- Authentication failures
-- Authorization failures
-- Database errors
-- Unexpected exceptions
-
-Never expose internal stack traces to clients.
+Never expose stack traces to clients.
 
 ---
 
@@ -417,13 +561,18 @@ Never expose internal stack traces to clients.
 
 Log:
 
-- Incoming requests
-- Response status
-- Execution time
-- Authentication failures
-- Critical errors
+- Incoming Requests
+- Response Status
+- Execution Time
+- Authentication Failures
+- Critical Errors
 
-Sensitive information must never be logged.
+Never log:
+
+- Passwords
+- JWT Tokens
+- API Keys
+- Secrets
 
 ---
 
@@ -431,41 +580,44 @@ Sensitive information must never be logged.
 
 Track:
 
-- API latency
-- Error rate
-- Request volume
-- Slow endpoints
-- Response times
-
-These metrics help identify bottlenecks.
+- API Latency
+- Error Rate
+- Request Volume
+- Slow Endpoints
+- Database Performance
+- Socket Connections
 
 ---
 
 # 21. Documentation
 
-Every endpoint should include:
+Every endpoint must include:
 
 - Purpose
 - Method
 - URL
-- Authentication requirement
-- Request schema
-- Response schema
-- Error responses
+- Authentication
+- Request Schema
+- Response Schema
+- Error Responses
 
-Generate OpenAPI documentation where possible.
+Future:
+
+- OpenAPI (Swagger)
 
 ---
 
 # 22. Security
 
-- Validate all input.
-- Sanitize user-provided data.
-- Protect against SQL Injection.
-- Protect against XSS.
-- Apply rate limiting.
-- Enforce authentication and authorization.
-- Return generic error messages for sensitive failures.
+- Validate all input
+- Sanitize user input
+- Prevent SQL Injection
+- Prevent XSS
+- Prevent CSRF (where applicable)
+- Apply Rate Limiting
+- Enforce Authentication
+- Enforce Authorization
+- Return generic error messages
 
 ---
 
@@ -473,29 +625,34 @@ Generate OpenAPI documentation where possible.
 
 Verify:
 
-- CRUD operations
+- CRUD Operations
 - Validation
 - Authentication
 - Authorization
 - Pagination
 - Filtering
 - Sorting
-- Error responses
+- Error Handling
 - Performance
 
-Automate endpoint testing where possible.
+Future:
+
+- Unit Tests
+- Integration Tests
+- API Tests
 
 ---
 
 # 24. Best Practices
 
+- Keep routes minimal.
 - Keep controllers thin.
 - Put business logic in services.
 - Keep repositories database-focused.
+- Validate every request.
 - Return consistent responses.
-- Validate everything.
-- Document every endpoint.
 - Version public APIs.
+- Follow separation of concerns.
 
 ---
 
@@ -503,11 +660,16 @@ Automate endpoint testing where possible.
 
 Before proceeding:
 
-- API folder structure created
+- Express server configured
+- Folder structure created
+- Routes implemented
+- Controllers implemented
+- Services implemented
+- Repositories implemented
 - Validation implemented
 - Authentication middleware working
 - Authorization verified
-- Error handler implemented
+- Central error handler configured
 - Logging configured
 - API documentation generated
 - Tests passing
@@ -518,7 +680,10 @@ Before proceeding:
 
 At the end of this module:
 
-- Every SyncBoard API follows a consistent standard.
-- Endpoints are secure, documented, and maintainable.
+- The backend follows a scalable layered architecture.
+- Every API is secure, documented, and maintainable.
 - Validation, authentication, and authorization are enforced.
-- The backend is ready for advanced Socket.IO development and realtime communication.
+- Controllers remain lightweight.
+- Business logic is centralized in services.
+- Database access is isolated in repositories.
+- The backend is fully prepared for Socket.IO realtime collaboration.

@@ -3,48 +3,217 @@
 > **Project:** SyncBoard
 > **Document:** Deployment
 > **Phase:** 10 - Development
-> **Version:** 1.0
+> **Version:** 2.0
+> **Status:** Final (Architecture Frozen)
 
 ---
 
 # 1. Overview
 
-This document defines the deployment standards for SyncBoard.
+This document defines the deployment architecture for SyncBoard.
 
-The deployment strategy aims to provide:
+The deployment strategy focuses on:
 
-- Repeatable deployments
-- Zero-downtime releases
-- Automated CI/CD
-- Secure infrastructure
-- Reliable rollback procedures
-- Environment consistency
+- Scalability
+- High Availability
+- Performance
+- Security
+- Reliability
+- Easy Maintenance
+- Continuous Deployment
 
-Production deployments should be fully automated wherever possible.
+The frontend and backend are deployed independently, allowing each service to scale according to its workload.
 
 ---
 
 # 2. Objectives
 
-After implementing this module, SyncBoard should support:
+After deployment, the application should provide:
 
-- Docker containerization
-- Local development environment
-- Staging deployment
-- Production deployment
-- GitHub Actions CI/CD
-- Automatic migrations
-- SSL
+- Independent frontend deployment
+- Independent backend deployment
+- Managed PostgreSQL database
+- Secure environment management
+- HTTPS everywhere
+- Automatic deployments
+- Monitoring
+- Logging
 - Backup strategy
-- Rollback support
-- Health monitoring
+- Easy rollback
 
 ---
 
-# 3. Deployment Architecture
+# 3. Production Architecture
 
 ```
-GitHub
+Users
+
+↓
+
+Cloudflare (Future)
+
+↓
+
+Vercel
+
+↓
+
+Next.js Frontend
+
+↓
+
+HTTPS REST API + Socket.IO
+
+↓
+
+Render
+
+↓
+
+Express.js Backend
+
+↓
+
+Prisma ORM
+
+↓
+
+Neon PostgreSQL
+
+↓
+
+Cloudinary (File Storage)
+```
+
+---
+
+# 4. Deployment Components
+
+## Frontend
+
+Platform
+
+- Vercel
+
+Technology
+
+- Next.js
+- TypeScript
+- Tailwind CSS
+
+Responsibilities
+
+- UI
+- Authentication Pages
+- Dashboard
+- Whiteboard
+- API Requests
+- Socket.IO Client
+
+---
+
+## Backend
+
+Platform
+
+- Render
+
+Technology
+
+- Node.js
+- Express.js
+- Socket.IO
+- Prisma
+
+Responsibilities
+
+- REST APIs
+- Business Logic
+- Authentication
+- Realtime Communication
+- Database Access
+
+---
+
+## Database
+
+Platform
+
+- Neon
+
+Technology
+
+- PostgreSQL
+
+Responsibilities
+
+- User Data
+- Workspaces
+- Boards
+- Shapes
+- Comments
+- Notifications
+- Activity Logs
+
+---
+
+## File Storage
+
+Platform
+
+- Cloudinary
+
+Responsibilities
+
+- Images
+- Board Assets
+- User Avatars
+- Future File Uploads
+
+---
+
+# 5. Environment Variables
+
+Frontend
+
+```
+NEXT_PUBLIC_API_URL
+
+NEXT_PUBLIC_SOCKET_URL
+
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+```
+
+Backend
+
+```
+PORT
+
+DATABASE_URL
+
+CLERK_SECRET_KEY
+
+CLERK_PUBLISHABLE_KEY
+
+JWT_SECRET
+
+CLOUDINARY_URL
+
+CLIENT_URL
+```
+
+Never commit `.env` files to Git.
+
+---
+
+# 6. Deployment Flow
+
+```
+Developer
+
+↓
+
+GitHub Push
 
 ↓
 
@@ -52,453 +221,219 @@ GitHub Actions
 
 ↓
 
-Build
+Build & Test
 
 ↓
 
-Docker Image
+Deploy
 
 ↓
 
-Container Registry
+Production
+```
 
-↓
+Automatic deployment should occur only after successful tests.
 
-Coolify
+---
 
-↓
+# 7. HTTPS
 
-Application Server
+All production traffic must use HTTPS.
 
-↓
+Secure:
 
-PostgreSQL
+- REST APIs
+- Socket.IO
+- Authentication
+- File Uploads
 
-↓
+---
+
+# 8. Domain Structure
+
+Example
+
+```
+Frontend
+
+app.syncboard.com
+
+Backend
+
+api.syncboard.com
+
+Documentation
+
+docs.syncboard.com
+```
+
+---
+
+# 9. Database Migrations
+
+Every deployment must run:
+
+```
+npx prisma migrate deploy
+```
+
+Never use:
+
+```
+prisma db push
+```
+
+in production.
+
+---
+
+# 10. CI/CD Pipeline
+
+Pipeline stages
+
+- Install Dependencies
+- Lint
+- Type Check
+- Unit Tests
+- Build
+- Deploy
+
+Deployment should stop immediately if any stage fails.
+
+---
+
+# 11. Rollback Strategy
+
+If deployment fails
+
+- Restore previous backend deployment
+- Restore previous frontend deployment
+- Keep database intact
+- Verify application health
+
+Database rollback should only be performed if absolutely necessary.
+
+---
+
+# 12. Monitoring
+
+Monitor
+
+- API availability
+- Frontend availability
+- Database health
+- Socket.IO connections
+- Memory usage
+- CPU usage
+- Error rates
+
+---
+
+# 13. Logging
+
+Log
+
+- Server Startup
+- API Errors
+- Authentication Failures
+- Database Errors
+- Socket.IO Errors
+
+Store logs separately from application data.
+
+---
+
+# 14. Security
+
+- HTTPS everywhere
+- Secure Environment Variables
+- Rate Limiting
+- CORS
+- Helmet
+- Input Validation
+- Secure Cookies (if used)
+- Secret Rotation
+
+---
+
+# 15. Backup Strategy
+
+Database
+
+- Daily Automated Backups
 
 Cloudinary
 
-↓
+- Asset Backup
 
-Cloudflare
-```
+Source Code
+
+- GitHub Repository
+
+Environment Variables
+
+- Secure Password Manager
 
 ---
 
-# 4. Environments
+# 16. Disaster Recovery
 
-Maintain separate environments:
+Recover
 
-```
-Development
-
-Staging
-
-Production
-```
-
-Each environment must have its own:
-
-- Environment variables
+- Backend
+- Frontend
 - Database
-- Secrets
-- Deployment pipeline
+- Uploaded Assets
+
+Document every recovery procedure.
 
 ---
 
-# 5. Docker
+# 17. Scaling Strategy
 
-Use Docker for:
+Frontend
 
-- Development
-- Testing
-- Production
+- Vercel Edge Network
 
-Benefits:
+Backend
 
-- Consistent runtime
-- Portable deployments
-- Dependency isolation
+- Render Instance Scaling
 
----
+Database
 
-# 6. Multi-Stage Docker Build
+- Neon Compute Scaling
 
-Recommended stages:
+Future
 
-```
-Dependencies
-
-↓
-
-Build
-
-↓
-
-Production Runtime
-```
-
-Advantages:
-
-- Smaller images
-- Faster deployments
-- Improved security
+- Redis
+- Load Balancer
+- Multiple Backend Instances
 
 ---
 
-# 7. Docker Compose
+# 18. Verification Checklist
 
-Local services:
+Before production
 
-```
-Application
-
-PostgreSQL
-
-Redis (Future)
-
-Mail Service (Development)
-
-Admin Tools
-```
-
-Compose should simplify onboarding for new developers.
+- Frontend deployed
+- Backend deployed
+- Database connected
+- Prisma migrations executed
+- Environment variables configured
+- HTTPS enabled
+- Authentication working
+- Socket.IO working
+- Monitoring configured
+- Backups verified
 
 ---
 
-# 8. Coolify Deployment
-
-Deploy using Coolify.
-
-Responsibilities:
-
-- Build containers
-- Inject environment variables
-- Restart services
-- Manage domains
-- Configure SSL
-- Monitor deployments
-
----
-
-# 9. Cloudflare Integration
-
-Cloudflare provides:
-
-- CDN
-- DNS
-- SSL
-- DDoS protection
-- Edge caching
-
-Future enhancements:
-
-- Web Application Firewall (WAF)
-- Rate limiting
-- Image optimization
-
----
-
-# 10. GitHub Actions
-
-Pipeline stages:
-
-```
-Checkout
-
-↓
-
-Install Dependencies
-
-↓
-
-Lint
-
-↓
-
-Type Check
-
-↓
-
-Run Tests
-
-↓
-
-Build
-
-↓
-
-Create Docker Image
-
-↓
-
-Push Image
-
-↓
-
-Deploy
-```
-
-Deployment should occur only after all quality checks pass.
-
----
-
-# 11. Environment Variables
-
-Separate environment files for:
-
-```
-Development
-
-Staging
-
-Production
-```
-
-Never commit secrets to version control.
-
-Use Coolify or GitHub Secrets for sensitive values.
-
----
-
-# 12. Database Migrations
-
-Deployment workflow:
-
-```
-Deploy
-
-↓
-
-Run Prisma Migrations
-
-↓
-
-Verify Success
-
-↓
-
-Start Application
-```
-
-Migration failures should stop deployment.
-
----
-
-# 13. Health Checks
-
-Expose:
-
-```
-GET /api/health
-```
-
-Verify:
-
-- Application status
-- Database connection
-- External service availability
-
-Health checks should be lightweight and fast.
-
----
-
-# 14. Readiness & Liveness
-
-Implement:
-
-```
-Readiness Probe
-
-Liveness Probe
-```
-
-Readiness:
-
-- Accepting requests
-
-Liveness:
-
-- Process is healthy
-
-These checks improve deployment reliability.
-
----
-
-# 15. Zero-Downtime Deployment
-
-Recommended flow:
-
-```
-Deploy New Version
-
-↓
-
-Health Check
-
-↓
-
-Switch Traffic
-
-↓
-
-Terminate Old Version
-```
-
-Users should not experience interruptions during deployments.
-
----
-
-# 16. Rollback Strategy
-
-Rollback if:
-
-- Health checks fail
-- Migrations fail
-- Critical errors occur
-- Monitoring detects instability
-
-Keep previous container images available for rapid recovery.
-
----
-
-# 17. Backups
-
-Back up:
-
-- PostgreSQL database
-- Uploaded metadata
-- Configuration
-
-Cloudinary stores uploaded files separately.
-
-Test restoration procedures regularly.
-
----
-
-# 18. Logging
-
-Collect logs from:
-
-- Application
-- API
-- Socket Server
-- Deployment Pipeline
-
-Store logs centrally for troubleshooting.
-
----
-
-# 19. Monitoring
-
-Track:
-
-- CPU
-- Memory
-- Disk usage
-- Response times
-- API errors
-- Socket connections
-- Deployment success rate
-
-Define alerts for critical failures.
-
----
-
-# 20. Security
-
-Deployment security requirements:
-
-- HTTPS only
-- Secure headers
-- Secret management
-- Image scanning
-- Least-privilege access
-- Dependency updates
-
-Never expose internal services directly to the public internet.
-
----
-
-# 21. Performance
-
-Optimize deployment by:
-
-- Layer caching
-- Multi-stage Docker builds
-- CDN usage
-- Asset compression
-- Image optimization
-- Build caching
-
-Aim for minimal deployment time and startup latency.
-
----
-
-# 22. Disaster Recovery
-
-Prepare for:
-
-- Server failure
-- Database corruption
-- Region outage
-- Failed deployments
-- Secret compromise
-
-Document recovery procedures and test them periodically.
-
----
-
-# 23. Deployment Checklist
-
-Before deployment:
-
-- Tests passing
-- Linting complete
-- Type checking passed
-- Docker image built
-- Environment variables verified
-- Database backup completed
-- Migrations reviewed
-- Health endpoint verified
-
----
-
-# 24. Post-Deployment Verification
-
-Verify:
-
-- Login
-- Workspace creation
-- Board loading
-- Realtime collaboration
-- File uploads
-- Notifications
-- Search
-- Dashboard
-- API responses
-
-Monitor logs closely after deployment.
-
----
-
-# 25. Best Practices
-
-- Automate deployments.
-- Keep environments isolated.
-- Version Docker images.
-- Never deploy untested code.
-- Monitor every deployment.
-- Practice rollback procedures.
-- Keep deployment documentation up to date.
-
----
-
-# 26. Expected Outcome
-
-At the end of this module:
-
-- SyncBoard has a repeatable, secure, and production-ready deployment process.
-- Infrastructure supports reliable releases with minimal downtime.
-- CI/CD, monitoring, backups, and rollback strategies are in place.
-- The project is ready for optimization, security hardening, monitoring, and long-term maintenance.
+# 19. Expected Outcome
+
+At the end of this module
+
+- SyncBoard is production-ready.
+- Frontend and backend can be deployed independently.
+- Deployment is secure, scalable, and maintainable.
+- CI/CD enables safe and automated releases.
+- The application is prepared for future horizontal scaling.

@@ -3,44 +3,40 @@
 > **Project:** SyncBoard
 > **Document:** Monitoring
 > **Phase:** 10 - Development
-> **Version:** 1.0
+> **Version:** 2.0
+> **Status:** Final (Architecture Frozen)
 
 ---
 
 # 1. Overview
 
-This document defines the monitoring and observability standards for SyncBoard.
+This document defines the monitoring strategy for SyncBoard.
 
-Monitoring enables developers and operators to:
+Monitoring ensures that the application remains:
 
-- Detect failures
-- Measure performance
-- Investigate incidents
-- Improve reliability
-- Track application health
-- Monitor infrastructure
+- Available
+- Reliable
+- Performant
+- Secure
+- Scalable
 
-Observability is built upon three pillars:
-
-- Logs
-- Metrics
-- Traces
+Every layer of the system should be monitored continuously.
 
 ---
 
 # 2. Objectives
 
-After implementing this module, SyncBoard should provide:
+After implementing this module, the application should provide:
 
-- Structured logging
-- Metrics collection
-- Distributed tracing
-- Error tracking
-- Health monitoring
+- Application monitoring
+- API monitoring
 - Database monitoring
-- Socket monitoring
+- Socket.IO monitoring
+- Performance metrics
+- Error tracking
+- Health checks
 - Alerting
-- Dashboards
+- Capacity planning
 - Incident visibility
 
 ---
@@ -48,38 +44,30 @@ After implementing this module, SyncBoard should provide:
 # 3. Monitoring Architecture
 
 ```
-Application
+Users
 
 ↓
 
-Logs
+Next.js Frontend
 
 ↓
 
-Metrics
+Express.js Backend
 
 ↓
 
-Traces
+Prisma ORM
 
 ↓
 
-Monitoring Platform
+PostgreSQL
 
 ↓
 
-Dashboards
-
-↓
-
-Alerts
-
-↓
-
-Incident Response
+Monitoring Dashboard
 ```
 
-Monitoring should cover every major application component.
+Each layer exposes metrics that can be collected independently.
 
 ---
 
@@ -87,405 +75,336 @@ Monitoring should cover every major application component.
 
 Monitor:
 
-```
-Frontend
-
-API
-
-Socket Server
-
-Database
-
-Authentication
-
-Cloudinary
-
-Deployment
-
-Infrastructure
-```
-
-Future services should integrate with the same monitoring pipeline.
+- Frontend
+- Backend
+- Database
+- Realtime Communication
+- Infrastructure
+- Deployments
 
 ---
 
-# 5. Structured Logging
+# 5. Application Logging
 
-All logs should be structured JSON.
+Backend logs should include:
 
-Every log entry should include:
+- Server Startup
+- Server Shutdown
+- Incoming Requests
+- Response Status
+- Response Time
+- Errors
+- Authentication Failures
 
-```
-Timestamp
-
-Level
-
-Request ID
-
-User ID (if available)
-
-Module
-
-Message
-
-Metadata
-```
-
-Avoid free-form logs where possible.
+Use structured JSON logging whenever possible.
 
 ---
 
 # 6. Log Levels
 
-Supported levels:
+Supported levels
 
 ```
-TRACE
-
-DEBUG
-
 INFO
 
 WARN
 
 ERROR
 
-FATAL
+DEBUG
 ```
 
-Use consistent log levels across the application.
+Use the appropriate level for every log.
 
 ---
 
-# 7. Request Correlation
+# 7. Request Monitoring
 
-Assign a unique Request ID to every incoming request.
+Track every request:
 
-The Request ID should propagate through:
-
-- API requests
-- Service layer
-- Repository layer
-- Socket events
-
-This simplifies troubleshooting across multiple systems.
+- Endpoint
+- HTTP Method
+- Status Code
+- Execution Time
+- User ID (when authenticated)
+- IP Address (where appropriate)
 
 ---
 
-# 8. Metrics Collection
+# 8. API Performance
 
-Collect metrics for:
+Measure
 
-- Request count
-- Request duration
-- Error rate
-- Active users
-- Socket connections
-- File uploads
-- Database queries
+- Average Response Time
+- Slow Endpoints
+- Request Volume
+- Error Rate
+- Success Rate
 
-Metrics should be lightweight and continuously collected.
+Set performance targets for critical APIs.
 
 ---
 
-# 9. Application Performance
+# 9. Database Monitoring
+
+Monitor PostgreSQL for:
+
+- Query Duration
+- Active Connections
+- Failed Queries
+- Transactions
+- Slow Queries
+
+Optimize queries that exceed acceptable thresholds.
+
+---
+
+# 10. Prisma Monitoring
 
 Track:
 
-- API latency
-- Dashboard loading
-- Search response time
-- Authentication time
-- File upload duration
-- Realtime synchronization latency
+- Query Execution Time
+- Transaction Duration
+- Failed Operations
+- Migration Status
 
-Review trends over time to identify regressions.
-
----
-
-# 10. Database Monitoring
-
-Monitor:
-
-- Query execution time
-- Connection pool usage
-- Slow queries
-- Migration status
-- Transaction failures
-
-Investigate recurring slow queries promptly.
+Enable Prisma query logging in development.
 
 ---
 
 # 11. Socket.IO Monitoring
 
+Monitor:
+
+- Active Connections
+- Connected Users
+- Events per Second
+- Failed Events
+- Reconnection Attempts
+- Room Count
+- Average Event Latency
+
+Realtime metrics should be collected separately from REST metrics.
+
+---
+
+# 12. Health Checks
+
+Expose a health endpoint.
+
+Example
+
+```
+GET /health
+```
+
+Health checks should verify:
+
+- Express Server
+- Database Connection
+- Prisma Client
+- Socket.IO Server
+
+Return:
+
+```
+Healthy
+
+or
+
+Unhealthy
+```
+
+---
+
+# 13. Error Tracking
+
 Track:
 
-- Active connections
-- Room count
-- Event frequency
-- Reconnection attempts
-- Broadcast latency
-- Failed events
+- API Errors
+- Database Errors
+- Socket Errors
+- Authentication Errors
+- Validation Errors
 
-Realtime collaboration should remain responsive under load.
+Future integration
 
----
-
-# 12. Error Tracking
-
-Capture:
-
-- Unhandled exceptions
-- API failures
-- Client-side errors
-- Socket errors
-- Database errors
-
-Recommended future integration:
-
-```
-Sentry
-```
-
-Each error should include sufficient context for debugging.
+- Sentry
 
 ---
 
-# 13. Health Checks
+# 14. Infrastructure Monitoring
 
-Provide endpoints:
+Monitor:
 
-```
-GET /api/health
+- CPU Usage
+- Memory Usage
+- Disk Usage
+- Network Usage
+- Process Uptime
 
-GET /api/ready
-
-GET /api/live
-```
-
-Health endpoints should verify:
-
-- Application status
-- Database connectivity
-- External service availability
+Track resource consumption continuously.
 
 ---
 
-# 14. Uptime Monitoring
+# 15. Performance Metrics
 
-Continuously verify:
+Measure:
 
-- Application availability
-- API availability
-- Socket availability
+- API Latency
+- Database Latency
+- Socket Latency
+- Page Load Time
+- Memory Usage
 
-Alert when services become unavailable.
-
----
-
-# 15. Distributed Tracing
-
-Trace requests across:
-
-```
-API
-
-↓
-
-Service
-
-↓
-
-Repository
-
-↓
-
-Database
-```
-
-Future integrations:
-
-- OpenTelemetry
-- Jaeger
-- Grafana Tempo
-
-Tracing helps identify bottlenecks in complex request flows.
+Compare metrics across releases.
 
 ---
 
 # 16. Dashboards
 
-Create dashboards for:
+Dashboards should display:
 
-- System health
-- API performance
-- Database metrics
-- Socket metrics
-- User activity
-- Deployment status
+- System Health
+- API Performance
+- Database Performance
+- Active Users
+- Active Socket Connections
+- Error Rates
+- Resource Usage
 
-Dashboards should provide actionable insights at a glance.
+Dashboards should provide a real-time overview of the application.
 
 ---
 
 # 17. Alerting
 
-Configure alerts for:
+Generate alerts for:
 
-- High error rates
-- Increased latency
-- Failed deployments
-- Database connection failures
-- Excessive memory usage
-- CPU saturation
-- Disk usage
-- Repeated authentication failures
+- High Error Rate
+- Server Down
+- Database Failure
+- Slow API
+- High Memory Usage
+- High CPU Usage
+- Socket Failure
 
-Avoid excessive alert noise.
+Alerts should reach developers immediately.
 
 ---
 
 # 18. Incident Management
 
-Incident workflow:
+When an issue occurs:
 
-```
-Detection
+1. Detect
+2. Alert
+3. Investigate
+4. Resolve
+5. Verify
+6. Document
 
-↓
-
-Alert
-
-↓
-
-Investigation
-
-↓
-
-Mitigation
-
-↓
-
-Recovery
-
-↓
-
-Postmortem
-```
-
-Every major incident should include a documented retrospective.
+Every production incident should have a post-incident report.
 
 ---
 
-# 19. SLIs
+# 19. Capacity Planning
 
-Suggested Service Level Indicators:
+Monitor growth of:
 
-- API availability
-- API latency
-- Successful login rate
-- Successful board synchronization
-- Search response time
-- File upload success rate
+- Users
+- Workspaces
+- Boards
+- Database Size
+- Storage Usage
+- Socket Connections
 
-Track SLIs continuously.
-
----
-
-# 20. SLOs
-
-Suggested Service Level Objectives:
-
-| Metric                    | Target                     |
-| ------------------------- | -------------------------- |
-| API Availability          | 99.9%                      |
-| Dashboard Load Time       | < 2 s                      |
-| API Response Time         | < 300 ms (95th percentile) |
-| Socket Connection Success | > 99%                      |
-| File Upload Success       | > 99%                      |
-
-Review SLOs periodically as the application scales.
+Plan scaling before limits are reached.
 
 ---
 
-# 21. Capacity Planning
+# 20. Security Monitoring
 
-Monitor trends for:
+Monitor:
 
-- Storage growth
-- Database size
-- Concurrent users
-- Socket connections
-- Network bandwidth
-- CPU utilization
-- Memory usage
+- Failed Logins
+- Suspicious Requests
+- Rate Limit Violations
+- Unauthorized Access Attempts
+- Invalid Socket Events
 
-Use historical data to forecast infrastructure needs.
+Security events should be retained for auditing.
 
 ---
 
-# 22. Security Monitoring
+# 21. Monitoring Tools
 
-Track:
+Recommended tools
 
-- Failed login attempts
-- Permission violations
-- Rate limit violations
-- Suspicious API activity
-- Unexpected file uploads
+Current
 
-Escalate unusual patterns for investigation.
+- Express Logging
+- Prisma Logging
+
+Future
+
+- Grafana
+- Prometheus
+- Sentry
+- UptimeRobot
+
+Tools may evolve as the project grows.
 
 ---
 
-# 23. Testing Monitoring
+# 22. Testing
 
 Verify:
 
-- Logs are generated correctly
-- Metrics are collected
-- Traces are complete
-- Alerts trigger appropriately
-- Dashboards update accurately
+- Logs Generated
+- Health Endpoint
+- Alerts
+- Metrics Collection
+- Error Tracking
+- Dashboard Accuracy
 
-Monitoring should be tested before production releases.
-
----
-
-# 24. Best Practices
-
-- Use structured logging.
-- Keep logs searchable.
-- Monitor critical user journeys.
-- Define meaningful alerts.
-- Avoid excessive logging.
-- Retain logs according to organizational policies.
-- Review dashboards regularly.
+Monitoring should be tested regularly.
 
 ---
 
-# 25. Verification Checklist
+# 23. Best Practices
 
-Before proceeding:
+- Log only meaningful information.
+- Never log sensitive data.
+- Monitor every production deployment.
+- Keep dashboards simple.
+- Alert only on actionable events.
+- Review metrics regularly.
+- Continuously optimize based on collected data.
 
-- Structured logging configured
-- Metrics collection enabled
-- Error tracking integrated
-- Health endpoints implemented
-- Dashboards created
+---
+
+# 24. Verification Checklist
+
+Before production:
+
+- Logging configured
+- Log levels implemented
+- Health endpoint working
+- Database monitoring enabled
+- Prisma monitoring enabled
+- Socket monitoring enabled
 - Alerts configured
-- Database monitoring active
-- Socket monitoring verified
-- SLOs documented
+- Dashboards available
+- Monitoring tested
 
 ---
 
-# 26. Expected Outcome
+# 25. Expected Outcome
 
 At the end of this module:
 
-- SyncBoard provides comprehensive observability across the entire stack.
-- Operational issues can be detected and diagnosed quickly.
-- Performance and reliability are continuously measurable.
-- The project is ready to establish long-term maintenance and operational procedures.
+- Every layer of SyncBoard is observable.
+- Problems are detected before users are significantly affected.
+- Performance bottlenecks can be identified quickly.
+- Monitoring supports continuous improvement and production reliability.

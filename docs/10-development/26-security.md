@@ -3,7 +3,8 @@
 > **Project:** SyncBoard
 > **Document:** Security
 > **Phase:** 10 - Development
-> **Version:** 1.0
+> **Version:** 2.0
+> **Status:** Final (Architecture Frozen)
 
 ---
 
@@ -11,42 +12,42 @@
 
 This document defines the security standards for SyncBoard.
 
-Security is implemented across every layer of the application:
+Security is implemented across every layer of the application, including:
 
 - Frontend
-- API
+- Backend
 - Authentication
 - Authorization
+- APIs
 - Database
-- File Uploads
-- Socket.IO
+- Realtime Communication
 - Infrastructure
 - Deployment
 
-Security should be integrated into development from the beginning rather than added later.
+Security must be considered during design, development, testing, and deployment.
 
 ---
 
 # 2. Objectives
 
-After implementing this module, SyncBoard should provide:
+After implementing this document, SyncBoard should provide:
 
 - Secure authentication
-- Role-based authorization
-- Secure APIs
-- Protected realtime communication
+- Fine-grained authorization
+- Protected REST APIs
+- Secure Socket.IO communication
+- Secure database access
 - Secure file uploads
-- Encrypted communication
-- Secure deployment
-- Audit logging
-- Security monitoring
+- Protection against common web attacks
+- Secure secrets management
+- Continuous security monitoring
 
 ---
 
 # 3. Security Architecture
 
 ```
-Client
+User
 
 ↓
 
@@ -54,88 +55,101 @@ HTTPS
 
 ↓
 
-Cloudflare
+Next.js Frontend
 
 ↓
 
-Next.js
+Clerk Authentication
 
 ↓
 
-Authentication
+Express.js API
 
 ↓
 
-Authorization
+Authentication Middleware
 
 ↓
 
-Validation
+Authorization Middleware
 
 ↓
 
-Service Layer
+Validation (Zod)
 
 ↓
 
-Repository
+Controllers
+
+↓
+
+Services
+
+↓
+
+Repositories
+
+↓
+
+Prisma ORM
 
 ↓
 
 PostgreSQL
 ```
 
-Every layer contributes to application security.
+Security is enforced at every layer.
 
 ---
 
-# 4. Authentication Security
+# 4. Authentication
 
-Authentication is managed by Clerk.
+SyncBoard uses **Clerk** for authentication.
 
-Responsibilities:
+Supported methods:
 
-- User registration
-- Login
-- Session management
-- OAuth providers
-- Multi-factor authentication (MFA)
-- Password reset
-- Session revocation
+- Email & Password
+- Google OAuth
+- Session Management
+- Multi-device Sessions
 
-The application should never manage passwords directly.
+Backend verifies Clerk JWT before processing protected requests.
 
 ---
 
 # 5. Authorization
 
-Authorization uses Role-Based Access Control (RBAC).
+Authorization is implemented inside the Service Layer.
 
-Supported roles:
+Verify:
 
-```
-Owner
+- Workspace membership
+- Board membership
+- Resource ownership
+- User roles
+- Permissions
 
-Admin
-
-Member
-
-Viewer
-```
-
-Permissions determine access to:
-
-- Workspaces
-- Boards
-- Comments
-- Files
-- Settings
-
-Authorization must be verified on every protected operation.
+Never trust client-side authorization.
 
 ---
 
-# 6. OWASP Top 10 Mitigation
+# 6. Input Validation
+
+All incoming data must be validated using **Zod**.
+
+Validate:
+
+- Request Body
+- Query Parameters
+- Route Parameters
+- Headers
+- Socket.IO Payloads
+
+Reject invalid requests immediately.
+
+---
+
+# 7. OWASP Top 10 Protection
 
 Protect against:
 
@@ -144,105 +158,114 @@ Protect against:
 - Injection
 - Insecure Design
 - Security Misconfiguration
-- Vulnerable Components
+- Vulnerable Dependencies
 - Authentication Failures
 - Software Integrity Failures
 - Logging Failures
 - Server-Side Request Forgery (SSRF)
 
-Review security practices regularly against the latest OWASP guidance.
+Review dependencies regularly.
 
 ---
 
-# 7. Input Validation
+# 8. SQL Injection Protection
 
-Validate:
+Database access is performed only through **Prisma ORM**.
 
-- Request body
-- Query parameters
-- Route parameters
-- Socket payloads
-- Uploaded files
+Never:
 
-Use shared Zod schemas throughout the application.
+- Build raw SQL using string concatenation.
+- Execute untrusted SQL.
+
+Use parameterized queries whenever raw SQL is necessary.
 
 ---
 
-# 8. XSS Prevention
+# 9. XSS Protection
 
 Protect against Cross-Site Scripting by:
 
-- Escaping rendered content
-- Sanitizing rich text
-- Avoiding unsafe HTML rendering
-- Using React's default escaping
+- Escaping user-generated content
+- Sanitizing HTML (if supported in future)
+- Avoiding unsafe rendering
+- Applying Content Security Policy (CSP)
 
-Never render untrusted HTML without sanitization.
-
----
-
-# 9. CSRF Protection
-
-For cookie-based authenticated requests:
-
-- Use CSRF tokens
-- Validate request origin
-- Restrict unsafe methods
-
-Review requirements based on the authentication flow used by Clerk.
+Never trust user input.
 
 ---
 
-# 10. SQL Injection Prevention
+# 10. CSRF Protection
 
-Use Prisma ORM exclusively.
+Use:
 
-Avoid:
+- Clerk session protection
+- SameSite cookies (if cookies are used)
+- CSRF tokens where applicable
 
-- String-concatenated SQL
-- Unsanitized raw queries
-
-If raw SQL is necessary, always use parameterized queries.
-
----
-
-# 11. Secure File Uploads
-
-Validate:
-
-- MIME type
-- Extension
-- File size
-- Upload permissions
-
-Reject:
-
-- Executable files
-- Unsupported formats
-- Oversized uploads
-
-Future enhancement:
-
-- Malware scanning
+Public APIs should validate request origins.
 
 ---
 
-# 12. Socket.IO Security
+# 11. Secure Headers
+
+Configure Helmet middleware.
+
+Enable:
+
+- Content-Security-Policy
+- X-Frame-Options
+- X-Content-Type-Options
+- Referrer-Policy
+- Permissions-Policy
+- Strict-Transport-Security
+
+---
+
+# 12. API Security
+
+Protect APIs by:
+
+- Authentication
+- Authorization
+- Validation
+- Rate Limiting
+- Error Handling
+- Logging
+
+Return only required data.
+
+---
+
+# 13. Socket.IO Security
 
 Every socket connection must:
 
 - Authenticate during handshake
-- Authorize room access
-- Validate event payloads
-- Enforce rate limits
+- Verify JWT
+- Validate every event payload
+- Verify room access
+- Disconnect unauthorized clients
 
-Disconnect clients performing unauthorized actions.
+Never trust socket events from the client.
 
 ---
 
-# 13. Secrets Management
+# 14. File Upload Security
 
-Store secrets in environment variables.
+Future uploads should:
+
+- Validate file type
+- Validate file size
+- Scan for malicious files (future)
+- Store files securely in Cloudinary
+
+Never execute uploaded files.
+
+---
+
+# 15. Secrets Management
+
+Store secrets only in environment variables.
 
 Examples:
 
@@ -253,212 +276,198 @@ CLERK_SECRET_KEY
 
 JWT_SECRET
 
-CLOUDINARY_API_SECRET
-
-WEBHOOK_SECRET
+CLOUDINARY_URL
 ```
 
-Never:
-
-- Commit secrets
-- Log secrets
-- Embed secrets in frontend bundles
+Never commit secrets to Git.
 
 ---
 
-# 14. Encryption
+# 16. Password Policy
 
-Encryption in transit:
+Password management is handled by Clerk.
 
-```
-HTTPS
-
-TLS
-```
-
-Encryption at rest:
-
-- Database encryption (provider-managed)
-- Cloudinary-managed storage
-- Encrypted backups where supported
+Do not store or process raw passwords within the backend.
 
 ---
 
-# 15. HTTP Security Headers
+# 17. Logging Security
 
-Recommended headers:
+Log:
 
-```
-Content-Security-Policy
+- Failed logins
+- Permission failures
+- Critical errors
+- Suspicious activity
 
-Strict-Transport-Security
+Never log:
 
-X-Content-Type-Options
-
-Referrer-Policy
-
-Permissions-Policy
-
-X-Frame-Options
-```
-
-Review policies whenever new external integrations are added.
+- Passwords
+- JWT Tokens
+- Session Tokens
+- API Keys
+- Secrets
 
 ---
 
-# 16. Rate Limiting
+# 18. Error Handling
+
+Return generic error messages.
+
+Example
+
+```
+Unauthorized
+```
+
+Avoid exposing:
+
+- Stack traces
+- Database errors
+- Internal file paths
+- SQL queries
+
+---
+
+# 19. Rate Limiting
 
 Protect:
 
-- Login
-- Search
-- File Uploads
+- Authentication endpoints
+- Search endpoints
+- File uploads
 - Public APIs
-- Socket events
+- Socket.IO events
 
 Future implementation:
 
-- Redis-backed distributed rate limiting
+- express-rate-limit
+- Redis-based distributed rate limiting
 
 ---
 
-# 17. Audit Logging
-
-Record security-relevant events:
-
-- Login
-- Logout
-- Failed authentication
-- Role changes
-- Workspace ownership transfer
-- Account deletion
-- Permission updates
-
-Do not log passwords, tokens, or sensitive personal data.
-
----
-
-# 18. Dependency Security
+# 20. Dependency Security
 
 Regularly:
 
-- Update dependencies
-- Remove unused packages
+- Update packages
 - Review security advisories
-- Scan for known vulnerabilities
+- Remove unused dependencies
+- Run dependency audits
 
-Use automated dependency update tools where appropriate.
-
----
-
-# 19. Container Security
-
-Secure Docker images by:
-
-- Using minimal base images
-- Running as a non-root user
-- Keeping packages updated
-- Scanning images before deployment
-
-Avoid embedding secrets into images.
+Never ignore critical vulnerabilities.
 
 ---
 
-# 20. Infrastructure Security
+# 21. Database Security
 
-Secure infrastructure with:
+Use:
 
-- Cloudflare
+- Least privilege database users
+- Encrypted connections
+- Automatic backups
+- Prisma ORM
+- Secure migrations
+
+Never expose the database publicly.
+
+---
+
+# 22. Infrastructure Security
+
+Production environment should enforce:
+
 - HTTPS
 - Firewall rules
-- Private database access
-- Restricted SSH access
-- Principle of least privilege
-
-Administrative access should require strong authentication.
+- Secure environment variables
+- Automatic OS updates
+- Restricted server access
 
 ---
 
-# 21. Incident Response
-
-Prepare procedures for:
-
-- Data breach
-- Credential compromise
-- Unauthorized access
-- Malware detection
-- Service outage
-
-Document escalation paths and recovery steps.
-
----
-
-# 22. Security Testing
-
-Include:
-
-- Authentication tests
-- Authorization tests
-- Input validation tests
-- File upload tests
-- API security tests
-- Socket security tests
-- Dependency scanning
-
-Perform testing before production releases.
-
----
-
-# 23. Monitoring
+# 23. Security Monitoring
 
 Monitor:
 
-- Failed logins
-- Permission violations
-- Suspicious API traffic
-- Socket abuse
+- Authentication failures
+- API abuse
 - Rate limit violations
-- Unexpected errors
+- Socket abuse
+- Database errors
+- Suspicious activity
 
-Alert on abnormal security events.
+Investigate repeated failures.
 
 ---
 
-# 24. Best Practices
+# 24. Security Testing
 
-- Apply least privilege.
-- Validate every input.
-- Authenticate every request.
-- Authorize every action.
+Perform:
+
+- Authentication testing
+- Authorization testing
+- API testing
+- Input validation testing
+- SQL Injection testing
+- XSS testing
+- Socket.IO security testing
+
+Include security tests in CI/CD.
+
+---
+
+# 25. Incident Response
+
+If a security issue occurs:
+
+1. Identify the issue.
+2. Contain the impact.
+3. Investigate the root cause.
+4. Fix the vulnerability.
+5. Deploy the patch.
+6. Monitor for recurrence.
+7. Document the incident.
+
+---
+
+# 26. Best Practices
+
+- Validate everything.
+- Authenticate every protected request.
+- Authorize every sensitive action.
 - Keep dependencies updated.
 - Rotate secrets periodically.
-- Log security events responsibly.
-- Review permissions regularly.
+- Use HTTPS everywhere.
+- Log responsibly.
+- Follow the principle of least privilege.
 
 ---
 
-# 25. Verification Checklist
+# 27. Verification Checklist
 
-Before proceeding:
+Before production:
 
-- Authentication configured
+- Clerk authentication working
+- JWT verification implemented
 - Authorization verified
-- Validation implemented
-- HTTPS enforced
-- Security headers configured
+- Zod validation implemented
+- Helmet configured
 - Rate limiting enabled
-- Audit logging active
-- Dependency scan completed
-- Container scan completed
+- HTTPS enabled
+- Secrets secured
+- Socket authentication working
+- Database secured
+- Dependency audit completed
 - Security tests passing
 
 ---
 
-# 26. Expected Outcome
+# 28. Expected Outcome
 
 At the end of this module:
 
-- SyncBoard follows a defense-in-depth security strategy.
-- Authentication, authorization, validation, and infrastructure protections work together.
-- Security risks are reduced through proactive controls and continuous monitoring.
-- The project is ready to implement operational monitoring and observability.
+- SyncBoard follows industry-standard security practices.
+- Every request and realtime event is authenticated, authorized, and validated.
+- Sensitive information is protected.
+- The application is resilient against common web attacks.
+- Security remains an integral part of the development lifecycle.
