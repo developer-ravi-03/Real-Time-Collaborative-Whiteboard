@@ -1,6 +1,23 @@
-"use client";
-import { motion } from "framer-motion";
-import { Bot, CalendarClock, Command, FileText, Layers3, MessagesSquare } from "lucide-react";
-import { SectionHeading } from "../SectionHeading";
-const features = [[Layers3,"Clarity by default","See the work, the why, and exactly what should happen next."],[Command,"A home for momentum","Turn scattered tasks into one dependable operating rhythm."],[MessagesSquare,"Conversations in context","Keep the decision beside the work it shapes—never in a lost thread."],[Bot,"Thoughtful AI assistance","Summarize, unblock, and surface what matters without the busywork."],[CalendarClock,"A plan that stays alive","Make room for change while protecting the commitments that count."],[FileText,"Documents that belong","Turn briefs and feedback into a working part of your project."]] as const;
-export function Features() { return <section id="features" className="py-24 sm:py-32"><div className="mx-auto max-w-7xl px-5 lg:px-8"><SectionHeading eyebrow="One connected system" title="Less coordination. More craft." description="A single, considered place for the work your team is proud to put into the world." /><div className="mt-14 grid gap-4 md:grid-cols-2 lg:grid-cols-3">{features.map(([Icon,title,description], i) => <motion.article key={title} initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: .2 }} transition={{ delay: i * .05 }} whileHover={{ y: -5 }} className="group rounded-2xl border border-border bg-card p-7 shadow-sm transition-shadow hover:shadow-xl hover:shadow-indigo-950/5"><div className="grid size-11 place-items-center rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400"><Icon className="size-5" /></div><h3 className="mt-6 text-lg font-semibold tracking-tight">{title}</h3><p className="mt-2 text-sm leading-6 text-muted-foreground">{description}</p></motion.article>)}</div></div></section>; }
+import SectionHeading from "./SectionHeading";
+import FeatureCard from "./FeatureCard";
+import { features } from "./features";
+
+export default function Features() {
+  return (
+    <section className="relative py-24">
+      <div className="mx-auto max-w-7xl px-6">
+        <SectionHeading />
+
+        <div className="mt-20 space-y-32">
+          {features.map((feature, index) => (
+            <FeatureCard
+              key={feature.id}
+              feature={feature}
+              reverse={index % 2 === 1}
+            />
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
