@@ -26,11 +26,11 @@ export default function Navbar() {
 
   return (
     <header className="fixed inset-x-0 top-0 z-50">
-      <div className="mx-auto w-full max-w-screen-2xl px-8">
+      <div className="mx-auto w-full px-8">
         <div
           className={`
             flex
-            h-21
+            h-[84px]
             items-center
             justify-between
             rounded-2xl
