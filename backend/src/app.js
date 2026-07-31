@@ -5,6 +5,7 @@ import morgan from "morgan";
 import cookieParser from "cookie-parser";
 
 import env from "./config/env.js";
+import { clerkMiddleware } from "./config/clerk.js";
 
 import routes from "./routes/index.js";
 
@@ -28,6 +29,10 @@ app.use(helmet());
 
 app.use(morgan("dev"));
 
+app.use(cookieParser());
+
+app.use(clerkMiddleware());
+
 app.use(express.json());
 
 app.use(
@@ -35,8 +40,6 @@ app.use(
     extended: true,
   }),
 );
-
-app.use(cookieParser());
 
 /* -------------------------------------------------------------------------- */
 /*                                  API Routes                                */

@@ -1,24 +1,25 @@
 import { Router } from "express";
 
-import healthRoutes from "./health.routes.js";
-import authRoutes from "../modules/auth/auth.routes.js";
+import { getCurrentUser, clerkWebhook } from "./auth.controller.js";
+
+import { requireAuth } from "./auth.middleware.js";
 
 const router = Router();
 
 /*
 |--------------------------------------------------------------------------
-| Health Routes
+| Clerk Webhook
 |--------------------------------------------------------------------------
 */
 
-router.use("/health", healthRoutes);
+router.post("/webhook", clerkWebhook);
 
 /*
 |--------------------------------------------------------------------------
-| Authentication Routes
+| Current User
 |--------------------------------------------------------------------------
 */
 
-router.use("/auth", authRoutes);
+router.get("/me", requireAuth, getCurrentUser);
 
 export default router;
