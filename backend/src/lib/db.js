@@ -1,10 +1,17 @@
 import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { Pool } from "pg";
+import env from "../config/env.js";
+
+const pool = new Pool({
+  connectionString: env.DATABASE_URL,
+});
+
+const adapter = new PrismaPg(pool);
 
 const db = new PrismaClient({
-  log:
-    process.env.NODE_ENV === "development"
-      ? ["query", "warn", "error"]
-      : ["error"],
+  adapter,
+  log: env.NODE_ENV === "development" ? ["query", "warn", "error"] : ["error"],
 });
 
 export default db;

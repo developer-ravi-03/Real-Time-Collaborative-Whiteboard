@@ -2,23 +2,14 @@ import { Router } from "express";
 
 import healthRoutes from "./health.routes.js";
 import authRoutes from "../modules/auth/auth.routes.js";
+import userRoutes from "../modules/user/user.routes.js";
 
 const router = Router();
 
-/*
-|--------------------------------------------------------------------------
-| Health Routes
-|--------------------------------------------------------------------------
-*/
-
 router.use("/health", healthRoutes);
 
-/*
-|--------------------------------------------------------------------------
-| Authentication Routes
-|--------------------------------------------------------------------------
-*/
-
 router.use("/auth", authRoutes);
+
+router.use("/users", userRoutes);
 
 export default router;
