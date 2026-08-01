@@ -8,6 +8,19 @@ datasource db {
   provider = "postgresql"
 }
 
+enum RoomVisibility {
+  PRIVATE
+  PUBLIC
+}
+
+enum RoomRole {
+  OWNER
+  ADMIN
+  EDITOR
+  VIEWER
+}
+
+// User
 model User {
   id          String   @id @default(cuid())
 
@@ -27,9 +40,64 @@ model User {
   // Status
   isActive    Boolean  @default(true)
 
+  // Relations
+  ownedRooms  Room[]       @relation("RoomOwner")
+  memberships RoomMember[]
+
   // Audit
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   @@map("users")
+}
+
+// Room
+model Room {
+  id           String @id @default(cuid())
+
+  name         String
+  slug         String @unique
+  roomCode     String @unique
+
+  description  String?
+  thumbnail    String?
+
+  visibility   RoomVisibility @default(PRIVATE)
+
+  ownerId      String
+  owner        User @relation("RoomOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  memberships  RoomMember[]
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([ownerId])
+
+  @@map("rooms")
+}
+
+model RoomMember {
+  id         String @id @default(cuid())
+
+  roomId     String
+  userId     String
+
+  role       RoomRole @default(VIEWER)
+
+  room        Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user        User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  joinedAt   DateTime @default(now())
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([roomId, userId])
+
+  @@index([roomId])
+  @@index([userId])
+  @@index([role])
+
+  @@map("room_members")
 }

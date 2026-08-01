@@ -21,6 +21,16 @@ const env = cleanEnv(process.env, {
     default: "v1",
   }),
 
+  // for bypass authentication
+  AUTH_MODE: str({
+    default: "clerk",
+    choices: ["development", "clerk"],
+  }),
+
+  DEV_USER_EMAIL: str({
+    default: "",
+  }),
+
   DATABASE_URL: str(),
 
   FRONTEND_URL: str(),
