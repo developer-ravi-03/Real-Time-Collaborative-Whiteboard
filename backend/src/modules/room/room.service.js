@@ -5,7 +5,7 @@ class RoomService {
   /*                           Generate Unique Slug                             */
   /* -------------------------------------------------------------------------- */
 
-  async generateUniqueSlug(name) {
+  async generateUniqueSlug(name, ignoreRoomId = null) {
     const baseSlug = name
       .trim()
       .toLowerCase()
@@ -15,12 +15,26 @@ class RoomService {
     let slug = baseSlug;
     let counter = 1;
 
-    while (await db.room.findUnique({ where: { slug } })) {
+    while (true) {
+      const existingRoom = await db.room.findUnique({
+        where: {
+          slug,
+        },
+      });
+
+      // slug available
+      if (!existingRoom) {
+        return slug;
+      }
+
+      // same room → keep same slug
+      if (ignoreRoomId && existingRoom.id === ignoreRoomId) {
+        return slug;
+      }
+
       counter++;
       slug = `${baseSlug}-${counter}`;
     }
-
-    return slug;
   }
 
   /* -------------------------------------------------------------------------- */
@@ -230,6 +244,82 @@ class RoomService {
           roomId,
           userId,
         },
+      },
+    });
+  }
+
+  /**
+   * Update Room
+   */
+  async updateRoom(roomId, roomData) {
+    const updateData = {};
+
+    if (roomData.name !== undefined) {
+      updateData.name = roomData.name;
+
+      updateData.slug = await this.generateUniqueSlug(roomData.name, roomId);
+    }
+
+    if (roomData.description !== undefined) {
+      updateData.description = roomData.description;
+    }
+
+    if (roomData.visibility !== undefined) {
+      updateData.visibility = roomData.visibility;
+    }
+
+    if (roomData.thumbnail !== undefined) {
+      updateData.thumbnail = roomData.thumbnail;
+    }
+
+    if (roomData.name !== undefined) {
+      updateData.slug = await this.generateUniqueSlug(roomData.name, roomId);
+    }
+
+    return await db.room.update({
+      where: {
+        id: roomId,
+      },
+
+      data: updateData,
+
+      include: {
+        owner: {
+          select: {
+            id: true,
+            displayName: true,
+            imageUrl: true,
+          },
+        },
+
+        memberships: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                displayName: true,
+                imageUrl: true,
+              },
+            },
+          },
+        },
+
+        _count: {
+          select: {
+            memberships: true,
+          },
+        },
+      },
+    });
+  }
+
+  /**
+   * Delete Room
+   */
+  async deleteRoom(roomId) {
+    return await db.room.delete({
+      where: {
+        id: roomId,
       },
     });
   }

@@ -15,3 +15,13 @@ export const createRoomSchema = z.object({
 
   visibility: z.enum(["PRIVATE", "PUBLIC"]).default("PRIVATE"),
 });
+
+export const updateRoomSchema = z.object({
+  name: z.string().trim().min(3).max(60).optional(),
+
+  description: z.string().trim().max(500).optional(),
+
+  visibility: z.enum(["PRIVATE", "PUBLIC"]).optional(),
+
+  thumbnail: z.string().url().optional(),
+});

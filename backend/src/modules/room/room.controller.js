@@ -55,3 +55,21 @@ export const getRoomById = asyncHandler(async (req, res) => {
     .status(200)
     .json(new ApiResponse(200, "Room fetched successfully.", response));
 });
+
+export const updateRoom = asyncHandler(async (req, res) => {
+  const room = await RoomService.updateRoom(req.room.id, req.body);
+
+  const response = roomDetailsPresenter(room, req.user.id);
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, "Room updated successfully.", response));
+});
+
+export const deleteRoom = asyncHandler(async (req, res) => {
+  await RoomService.deleteRoom(req.room.id);
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, "Room deleted successfully.", null));
+});
