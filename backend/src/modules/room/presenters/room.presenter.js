@@ -23,13 +23,21 @@ export const roomDetailsPresenter = (room, currentUserId) => {
     memberCount: room._count.memberships,
 
     members: room.memberships.map((membership) => ({
-      id: membership.user.id,
-
-      displayName: membership.user.displayName,
-
-      imageUrl: membership.user.imageUrl,
+      memberId: membership.id,
 
       role: membership.role,
+
+      joinedAt: membership.joinedAt,
+
+      user: {
+        id: membership.user.id,
+
+        displayName: membership.user.displayName,
+
+        username: membership.user.username,
+
+        imageUrl: membership.user.imageUrl,
+      },
     })),
 
     createdAt: room.createdAt,
@@ -55,3 +63,51 @@ export const joinedRoomPresenter = (room, role) => {
     yourRole: role,
   };
 };
+
+export const roomMembersPresenter = (members) => {
+  return members.map((member) => ({
+    memberId: member.id,
+
+    role: member.role,
+
+    joinedAt: member.joinedAt,
+
+    user: {
+      id: member.user.id,
+
+      displayName: member.user.displayName,
+
+      username: member.user.username,
+
+      imageUrl: member.user.imageUrl,
+    },
+  }));
+};
+
+export const updatedMemberPresenter = (member) => ({
+  memberId: member.id,
+
+  role: member.role,
+
+  user: {
+    id: member.user.id,
+
+    displayName: member.user.displayName,
+
+    imageUrl: member.user.imageUrl,
+  },
+});
+
+export const removedMemberPresenter = (member) => ({
+  id: member.id,
+
+  role: member.role,
+
+  user: {
+    id: member.user.id,
+
+    displayName: member.user.displayName,
+
+    imageUrl: member.user.imageUrl,
+  },
+});
