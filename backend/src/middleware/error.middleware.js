@@ -3,12 +3,15 @@ import ApiResponse from "../utils/ApiResponse.js";
 const errorHandler = (err, req, res, next) => {
   console.error(err);
 
+  const statusCode = err.statusCode || 500;
+
   return res
-    .status(err.statusCode || 500)
+    .status(statusCode)
     .json(
       new ApiResponse(
-        err.statusCode || 500,
-        err.message || "Internal Server Error",
+        statusCode,
+        err.message || "Internal Server Error.",
+        null,
       ),
     );
 };

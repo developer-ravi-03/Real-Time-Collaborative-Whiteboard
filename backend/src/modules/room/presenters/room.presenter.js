@@ -37,3 +37,21 @@ export const roomDetailsPresenter = (room, currentUserId) => {
     updatedAt: room.updatedAt,
   };
 };
+
+export const joinedRoomPresenter = (room, role) => {
+  return {
+    room: {
+      id: room.id,
+
+      name: room.name,
+
+      slug: room.slug,
+
+      roomCode: room.roomCode,
+
+      visibility: room.visibility,
+    },
+
+    yourRole: role,
+  };
+};

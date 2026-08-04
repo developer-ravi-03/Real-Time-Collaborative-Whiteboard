@@ -15,10 +15,14 @@ import {
   requireRoomAdmin,
   requireRoomOwner,
 } from "./middleware/room.middleware.js";
+import { joinRoomSchema } from "./room-member.validation.js";
+import { joinRoom } from "./room-member.controller.js";
 
 const router = Router();
 
 router.post("/", requireAuth, validateRequest(createRoomSchema), createRoom);
+
+router.post("/join", requireAuth, validateRequest(joinRoomSchema), joinRoom);
 
 router.get("/my", requireAuth, getMyRooms);
 
