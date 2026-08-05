@@ -272,10 +272,6 @@ class RoomService {
       updateData.thumbnail = roomData.thumbnail;
     }
 
-    if (roomData.name !== undefined) {
-      updateData.slug = await this.generateUniqueSlug(roomData.name, roomId);
-    }
-
     return await db.room.update({
       where: {
         id: roomId,

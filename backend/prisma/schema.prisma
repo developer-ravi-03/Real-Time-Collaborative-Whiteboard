@@ -20,16 +20,21 @@ enum RoomRole {
   VIEWER
 }
 
+enum BoardType {
+  INFINITE
+  SLIDES
+}
+
 // User
 model User {
-  id          String   @id @default(cuid())
+  id String @id @default(cuid())
 
   // Clerk
-  clerkId     String   @unique
+  clerkId String @unique
 
   // Identity
-  email       String   @unique
-  username    String?  @unique
+  email    String  @unique
+  username String? @unique
 
   // Profile
   firstName   String?
@@ -38,66 +43,124 @@ model User {
   imageUrl    String?
 
   // Status
-  isActive    Boolean  @default(true)
+  isActive Boolean @default(true)
 
   // Relations
-  ownedRooms  Room[]       @relation("RoomOwner")
-  memberships RoomMember[]
+  ownedRooms    Room[]       @relation("RoomOwner")
+  memberships   RoomMember[]
+  createdBoards Board[]      @relation("BoardCreator")
 
   // Audit
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("users")
 }
 
 // Room
 model Room {
-  id           String @id @default(cuid())
+  id String @id @default(cuid())
 
-  name         String
-  slug         String @unique
-  roomCode     String @unique
+  name     String
+  slug     String @unique
+  roomCode String @unique
 
-  description  String?
-  thumbnail    String?
+  description String?
+  thumbnail   String?
 
-  visibility   RoomVisibility @default(PRIVATE)
+  visibility RoomVisibility @default(PRIVATE)
 
-  ownerId      String
-  owner        User @relation("RoomOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  ownerId String
+  owner   User   @relation("RoomOwner", fields: [ownerId], references: [id], onDelete: Cascade)
 
-  memberships  RoomMember[]
+  memberships RoomMember[]
+  boards      Board[]
 
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([ownerId])
-
   @@map("rooms")
 }
 
 model RoomMember {
-  id         String @id @default(cuid())
+  id String @id @default(cuid())
 
-  roomId     String
-  userId     String
+  roomId String
+  userId String
 
-  role       RoomRole @default(VIEWER)
+  role RoomRole @default(VIEWER)
 
-  room        Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  user        User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  joinedAt   DateTime @default(now())
+  joinedAt DateTime @default(now())
 
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([roomId, userId])
-
   @@index([roomId])
   @@index([userId])
   @@index([role])
-
   @@map("room_members")
+}
+
+// Board model
+model Board {
+  id String @id @default(cuid())
+
+  roomId String
+
+  createdById String
+
+  name String
+
+  description String?
+
+  type BoardType
+
+  settings Json
+
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  createdBy User @relation("BoardCreator", fields: [createdById], references: [id], onDelete: Cascade)
+
+  pages BoardPage[]
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([roomId, name])
+  @@index([roomId])
+  @@index([createdById])
+  @@map("boards")
+}
+
+// board page
+model BoardPage {
+  id String @id @default(cuid())
+
+  boardId String
+
+  pageNumber Int
+
+  title String?
+
+  canvasData Json
+
+  version Int @default(1)
+
+  thumbnailUrl String?
+
+  board Board @relation(fields: [boardId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([boardId, pageNumber])
+  @@index([boardId])
+  @@map("board_pages")
 }
