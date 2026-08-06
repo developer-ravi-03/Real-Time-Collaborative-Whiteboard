@@ -6,6 +6,7 @@ import BoardService from "./board.service.js";
 import {
   boardDetailsPresenter,
   boardListPresenter,
+  boardInitializationPresenter,
 } from "./presenters/board.presenter.js";
 
 /* -------------------------------------------------------------------------- */
@@ -65,6 +66,24 @@ export const getBoardById = asyncHandler(async (req, res) => {
         200,
         "Board fetched successfully.",
         boardDetailsPresenter(board),
+      ),
+    );
+});
+
+/* -------------------------------------------------------------------------- */
+/*                        Board Initialization                                */
+/* -------------------------------------------------------------------------- */
+
+export const getBoardInitialization = asyncHandler(async (req, res) => {
+  const board = await BoardService.getBoardInitialization(req.board.id);
+
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(
+        200,
+        "Board initialized successfully.",
+        boardInitializationPresenter(board),
       ),
     );
 });

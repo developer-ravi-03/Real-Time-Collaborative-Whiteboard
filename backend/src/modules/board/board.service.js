@@ -179,6 +179,41 @@ class BoardService {
     return board;
   }
 
+  async getBoardInitialization(boardId) {
+    const board = await db.board.findUnique({
+      where: {
+        id: boardId,
+      },
+
+      include: {
+        createdBy: {
+          select: {
+            id: true,
+            displayName: true,
+            imageUrl: true,
+          },
+        },
+
+        pages: {
+          orderBy: {
+            pageNumber: "asc",
+          },
+        },
+
+        _count: {
+          select: {
+            pages: true,
+          },
+        },
+      },
+    });
+
+    if (!board) {
+      throw new ApiError(404, "Board not found.");
+    }
+
+    return board;
+  }
   /* -------------------------------------------------------------------------- */
   /*                              Update Board                                  */
   /* -------------------------------------------------------------------------- */

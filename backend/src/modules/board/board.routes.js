@@ -10,6 +10,7 @@ import {
   getBoardById,
   updateBoard,
   deleteBoard,
+  getBoardInitialization,
 } from "./board.controller.js";
 
 import {
@@ -64,6 +65,14 @@ router.get(
   loadBoard,
   requireRoomMember,
   getBoardById,
+);
+
+router.get(
+  "/boards/:boardId/initialize",
+  requireAuth,
+  loadBoard,
+  requireRoomMember,
+  getBoardInitialization,
 );
 
 router.patch(
