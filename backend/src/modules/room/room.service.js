@@ -158,6 +158,8 @@ class RoomService {
         thumbnail: true,
         visibility: true,
 
+        isSessionActive: true,
+
         createdAt: true,
         updatedAt: true,
 
@@ -222,6 +224,28 @@ class RoomService {
                 imageUrl: true,
               },
             },
+          },
+        },
+
+        boards: {
+          include: {
+            createdBy: {
+              select: {
+                id: true,
+                displayName: true,
+                imageUrl: true,
+              },
+            },
+
+            _count: {
+              select: {
+                pages: true,
+              },
+            },
+          },
+
+          orderBy: {
+            updatedAt: "desc",
           },
         },
 
@@ -316,6 +340,30 @@ class RoomService {
     return await db.room.delete({
       where: {
         id: roomId,
+      },
+    });
+  }
+
+  async closeSession(roomId) {
+    return await db.room.update({
+      where: {
+        id: roomId,
+      },
+
+      data: {
+        isSessionActive: false,
+      },
+    });
+  }
+
+  async reopenSession(roomId) {
+    return await db.room.update({
+      where: {
+        id: roomId,
+      },
+
+      data: {
+        isSessionActive: true,
       },
     });
   }

@@ -69,6 +69,8 @@ model Room {
   thumbnail   String?
 
   visibility RoomVisibility @default(PRIVATE)
+  // Session state (used by realtime collaboration)
+  isSessionActive Boolean         @default(true)
 
   ownerId String
   owner   User   @relation("RoomOwner", fields: [ownerId], references: [id], onDelete: Cascade)

@@ -2,10 +2,12 @@ import { Router } from "express";
 import { requireAuth } from "../auth/auth.middleware.js";
 import validateRequest from "../../middleware/validate.middleware.js";
 import {
+  closeSession,
   createRoom,
   deleteRoom,
   getMyRooms,
   getRoomById,
+  reopenSession,
   updateRoom,
 } from "./room.controller.js";
 import { createRoomSchema, updateRoomSchema } from "./room.validation.js";
@@ -61,6 +63,24 @@ router.patch(
   requireRoomMember,
   validateRequest(updateMemberRoleSchema),
   updateMemberRole,
+);
+
+//close room
+router.post(
+  "/:roomId/close",
+  requireAuth,
+  loadRoom,
+  requireRoomOwner,
+  closeSession,
+);
+
+//reopen room
+router.post(
+  "/:roomId/reopen",
+  requireAuth,
+  loadRoom,
+  requireRoomOwner,
+  reopenSession,
 );
 
 router.delete("/:roomId", requireAuth, loadRoom, requireRoomOwner, deleteRoom);

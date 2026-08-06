@@ -14,7 +14,13 @@ export const roomDetailsPresenter = (room, currentUserId) => {
 
     visibility: room.visibility,
 
-    owner: room.owner,
+    isSessionActive: room.isSessionActive,
+
+    owner: {
+      id: room.owner.id,
+      displayName: room.owner.displayName,
+      imageUrl: room.owner.imageUrl,
+    },
 
     yourRole: room.memberships.find(
       (membership) => membership.userId === currentUserId,
@@ -40,6 +46,30 @@ export const roomDetailsPresenter = (room, currentUserId) => {
       },
     })),
 
+    boards: room.boards.map((board) => ({
+      id: board.id,
+
+      name: board.name,
+
+      description: board.description,
+
+      type: board.type,
+
+      settings: board.settings,
+
+      pageCount: board._count.pages,
+
+      createdBy: {
+        id: board.createdBy.id,
+        displayName: board.createdBy.displayName,
+        imageUrl: board.createdBy.imageUrl,
+      },
+
+      createdAt: board.createdAt,
+
+      updatedAt: board.updatedAt,
+    })),
+
     createdAt: room.createdAt,
 
     updatedAt: room.updatedAt,
@@ -58,6 +88,8 @@ export const joinedRoomPresenter = (room, role) => {
       roomCode: room.roomCode,
 
       visibility: room.visibility,
+
+      isSessionActive: room.isSessionActive,
     },
 
     yourRole: role,

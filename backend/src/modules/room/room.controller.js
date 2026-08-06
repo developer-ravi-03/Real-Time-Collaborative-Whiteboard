@@ -31,6 +31,8 @@ export const getMyRooms = asyncHandler(async (req, res) => {
     thumbnail: room.thumbnail,
     visibility: room.visibility,
 
+    isSessionActive: room.isSessionActive,
+
     owner: room.owner,
 
     yourRole: room.memberships[0]?.role,
@@ -72,4 +74,20 @@ export const deleteRoom = asyncHandler(async (req, res) => {
   return res
     .status(200)
     .json(new ApiResponse(200, "Room deleted successfully.", null));
+});
+
+export const closeSession = asyncHandler(async (req, res) => {
+  await RoomService.closeSession(req.room.id);
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, "Room session closed successfully.", null));
+});
+
+export const reopenSession = asyncHandler(async (req, res) => {
+  await RoomService.reopenSession(req.room.id);
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, "Room session reopened successfully.", null));
 });
