@@ -98,6 +98,28 @@ class PageService {
   }
 
   /* -------------------------------------------------------------------------- */
+  /*                           Get First Page                                   */
+  /* -------------------------------------------------------------------------- */
+
+  async getFirstPage(boardId) {
+    const page = await db.boardPage.findFirst({
+      where: {
+        boardId,
+      },
+
+      orderBy: {
+        pageNumber: "asc",
+      },
+    });
+
+    if (!page) {
+      throw new ApiError(404, "No page found.");
+    }
+
+    return page;
+  }
+
+  /* -------------------------------------------------------------------------- */
   /*                             Get Page By Id                                 */
   /* -------------------------------------------------------------------------- */
 
@@ -120,6 +142,24 @@ class PageService {
   /* -------------------------------------------------------------------------- */
 
   async updatePage(pageId, pageData) {
+    return await db.boardPage.update({
+      where: {
+        id: pageId,
+      },
+
+      data: {
+        ...(pageData.title !== undefined && {
+          title: pageData.title,
+        }),
+      },
+    });
+  }
+
+  /* -------------------------------------------------------------------------- */
+  /*                              Save Canvas                                   */
+  /* -------------------------------------------------------------------------- */
+
+  async saveCanvas(pageId, canvasData) {
     const page = await this.getPage(pageId);
 
     if (!page) {
@@ -132,13 +172,7 @@ class PageService {
       },
 
       data: {
-        ...(pageData.title !== undefined && {
-          title: pageData.title,
-        }),
-
-        ...(pageData.canvasData !== undefined && {
-          canvasData: pageData.canvasData,
-        }),
+        canvasData,
 
         version: {
           increment: 1,

@@ -131,6 +131,44 @@ class BoardService {
   }
 
   /* -------------------------------------------------------------------------- */
+  /*                           Get First Board                                  */
+  /* -------------------------------------------------------------------------- */
+
+  async getFirstBoard(roomId) {
+    const board = await db.board.findFirst({
+      where: {
+        roomId,
+      },
+
+      include: {
+        createdBy: {
+          select: {
+            id: true,
+            displayName: true,
+            imageUrl: true,
+          },
+        },
+
+        _count: {
+          select: {
+            pages: true,
+          },
+        },
+      },
+
+      orderBy: {
+        createdAt: "asc",
+      },
+    });
+
+    if (!board) {
+      throw new ApiError(404, "No board found.");
+    }
+
+    return board;
+  }
+
+  /* -------------------------------------------------------------------------- */
   /*                               Get Board                                    */
   /* -------------------------------------------------------------------------- */
 
