@@ -2,15 +2,13 @@ import { getAuth } from "../../config/clerk.js";
 import env from "../../config/env.js";
 
 import ApiResponse from "../../utils/ApiResponse.js";
-
 import UserService from "../user/user.service.js";
 
 export const requireAuth = async (req, res, next) => {
   try {
-    /* -------------------------------------------------------------------------- */
-    /*                           Development Auth Mode                            */
-    /* -------------------------------------------------------------------------- */
-
+    /*
+     * Development authentication
+     */
     if (env.AUTH_MODE === "development") {
       const devUser = await UserService.getUserByEmail(env.DEV_USER_EMAIL);
 
@@ -36,13 +34,12 @@ export const requireAuth = async (req, res, next) => {
       return next();
     }
 
-    /* -------------------------------------------------------------------------- */
-    /*                               Clerk Auth                                   */
-    /* -------------------------------------------------------------------------- */
-
+    /*
+     * Production / Clerk authentication
+     */
     const auth = getAuth(req);
 
-    if (!auth.userId) {
+    if (!auth?.userId) {
       return res.status(401).json(new ApiResponse(401, "Unauthorized.", null));
     }
 
@@ -57,8 +54,8 @@ export const requireAuth = async (req, res, next) => {
     req.auth = auth;
     req.user = user;
 
-    next();
+    return next();
   } catch (error) {
-    next(error);
+    return next(error);
   }
 };
