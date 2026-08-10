@@ -221,6 +221,7 @@ class RoomService {
               select: {
                 id: true,
                 displayName: true,
+                username: true,
                 imageUrl: true,
               },
             },
@@ -296,41 +297,16 @@ class RoomService {
       updateData.thumbnail = roomData.thumbnail;
     }
 
-    return await db.room.update({
+    // Update room
+    await db.room.update({
       where: {
         id: roomId,
       },
-
       data: updateData,
-
-      include: {
-        owner: {
-          select: {
-            id: true,
-            displayName: true,
-            imageUrl: true,
-          },
-        },
-
-        memberships: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                displayName: true,
-                imageUrl: true,
-              },
-            },
-          },
-        },
-
-        _count: {
-          select: {
-            memberships: true,
-          },
-        },
-      },
     });
+
+    // Return complete RoomDetails structure
+    return await this.getRoomDetails(roomId);
   }
 
   /**
