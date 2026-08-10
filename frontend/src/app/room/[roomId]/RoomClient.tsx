@@ -4,18 +4,29 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { apiRequest } from "@/lib/api-client";
 import type { ApiResponse } from "@/types/api";
-import type { RoomDetails } from "@/types/room";
+import type { RoomDetails, RoomRole, RoomBoard } from "@/types/room";
 import { RoomHeader } from "@/components/room/RoomHeader";
 import { RoomOverview } from "@/components/room/RoomOverview";
 import { RoomBoards } from "@/components/room/RoomBoards";
 import { RoomMembers } from "@/components/room/RoomMembers";
 import { useRouter } from "next/navigation";
-import { RoomActions } from "@/components/room/RoomActions";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { EditRoomModal } from "@/components/room/EditRoomModal";
+import { CreateBoardModal } from "@/components/room/CreateBoardModal";
+import { EditBoardModal } from "@/components/room/EditBoardModal";
 
 type RoomClientProps = {
   roomId: string;
+};
+
+type UpdatedMemberResponse = {
+  memberId: string;
+  role: RoomRole;
+  user: {
+    id: string;
+    displayName: string;
+    imageUrl?: string | null;
+  };
 };
 
 export default function RoomClient({ roomId }: RoomClientProps) {
@@ -44,6 +55,21 @@ export default function RoomClient({ roomId }: RoomClientProps) {
   >(null);
 
   const [actionLoading, setActionLoading] = useState(false);
+
+  const [showCreateBoard, setShowCreateBoard] = useState(false);
+
+  const [showEditBoard, setShowEditBoard] = useState(false);
+
+  const [selectedBoardId, setSelectedBoardId] = useState<string | null>(null);
+
+  const [confirmBoardDelete, setConfirmBoardDelete] = useState(false);
+
+  const [boardName, setBoardName] = useState("");
+  const [boardDescription, setBoardDescription] = useState("");
+  const [boardType, setBoardType] = useState<"INFINITE" | "SLIDES">("INFINITE");
+
+  const [boardLoading, setBoardLoading] = useState(false);
+  const [boardError, setBoardError] = useState<string | null>(null);
 
   const handleOpenEditRoom = () => {
     if (!room) return;
@@ -160,6 +186,214 @@ export default function RoomClient({ roomId }: RoomClientProps) {
     }
   };
 
+  const handleUpdateMemberRole = async (
+    memberId: string,
+    role: Exclude<RoomRole, "OWNER">,
+  ) => {
+    if (!room) return;
+
+    try {
+      setActionLoading(true);
+
+      await apiRequest<ApiResponse<UpdatedMemberResponse>>(
+        getToken,
+        `/rooms/${room.id}/members/${memberId}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            role,
+          }),
+        },
+      );
+
+      setRoom((current) => {
+        if (!current) return current;
+
+        return {
+          ...current,
+          members: current.members.map((member) =>
+            member.memberId === memberId
+              ? {
+                  ...member,
+                  role,
+                }
+              : member,
+          ),
+        };
+      });
+    } catch (error) {
+      console.error("Failed to update member role:", error);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleRemoveMember = async (memberId: string) => {
+    if (!room) return;
+
+    try {
+      setActionLoading(true);
+
+      await apiRequest(getToken, `/rooms/${room.id}/members/${memberId}`, {
+        method: "DELETE",
+      });
+
+      setRoom((current) => {
+        if (!current) return current;
+
+        return {
+          ...current,
+          members: current.members.filter(
+            (member) => member.memberId !== memberId,
+          ),
+          memberCount: Math.max(0, current.memberCount - 1),
+        };
+      });
+    } catch (error) {
+      console.error("Failed to remove member:", error);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleCreateBoard = async () => {
+    if (!room) return;
+
+    if (!boardName.trim()) {
+      setBoardError("Board name is required.");
+      return;
+    }
+
+    try {
+      setBoardLoading(true);
+      setBoardError(null);
+
+      const response = await apiRequest<ApiResponse<RoomBoard>>(
+        getToken,
+        `/rooms/${room.id}/boards`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            name: boardName.trim(),
+            description: boardDescription.trim() || undefined,
+            type: boardType,
+          }),
+        },
+      );
+
+      setRoom((current) =>
+        current
+          ? {
+              ...current,
+              boards: [response.data, ...current.boards],
+            }
+          : current,
+      );
+
+      setBoardName("");
+      setBoardDescription("");
+      setBoardType("INFINITE");
+
+      setShowCreateBoard(false);
+    } catch (error) {
+      setBoardError(
+        error instanceof Error ? error.message : "Failed to create board.",
+      );
+    } finally {
+      setBoardLoading(false);
+    }
+  };
+
+  const handleOpenEditBoard = (boardId: string) => {
+    if (!room) return;
+
+    const board = room.boards.find((item) => item.id === boardId);
+
+    if (!board) return;
+
+    setSelectedBoardId(board.id);
+    setBoardName(board.name);
+    setBoardDescription(board.description || "");
+    setBoardError(null);
+    setShowEditBoard(true);
+  };
+
+  const handleUpdateBoard = async () => {
+    if (!selectedBoardId) return;
+
+    if (!boardName.trim()) {
+      setBoardError("Board name is required.");
+      return;
+    }
+
+    try {
+      setBoardLoading(true);
+      setBoardError(null);
+
+      const response = await apiRequest<ApiResponse<RoomBoard>>(
+        getToken,
+        `/boards/${selectedBoardId}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            name: boardName.trim(),
+            description: boardDescription.trim() || undefined,
+          }),
+        },
+      );
+
+      setRoom((current) =>
+        current
+          ? {
+              ...current,
+              boards: current.boards.map((board) =>
+                board.id === selectedBoardId ? response.data : board,
+              ),
+            }
+          : current,
+      );
+
+      setShowEditBoard(false);
+      setSelectedBoardId(null);
+    } catch (error) {
+      setBoardError(
+        error instanceof Error ? error.message : "Failed to update board.",
+      );
+    } finally {
+      setBoardLoading(false);
+    }
+  };
+
+  const handleDeleteBoard = async () => {
+    if (!selectedBoardId) return;
+
+    try {
+      setBoardLoading(true);
+
+      await apiRequest(getToken, `/boards/${selectedBoardId}`, {
+        method: "DELETE",
+      });
+
+      setRoom((current) =>
+        current
+          ? {
+              ...current,
+              boards: current.boards.filter(
+                (board) => board.id !== selectedBoardId,
+              ),
+            }
+          : current,
+      );
+
+      setSelectedBoardId(null);
+      setConfirmBoardDelete(false);
+    } catch (error) {
+      console.error("Failed to delete board:", error);
+    } finally {
+      setBoardLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (!isLoaded || !isSignedIn) {
       return;
@@ -265,12 +499,27 @@ export default function RoomClient({ roomId }: RoomClientProps) {
               boards={room.boards}
               yourRole={room.yourRole}
               isSessionActive={room.isSessionActive}
+              onCreateBoard={() => {
+                setBoardName("");
+                setBoardDescription("");
+                setBoardType("INFINITE");
+                setBoardError(null);
+                setShowCreateBoard(true);
+              }}
+              onEditBoard={handleOpenEditBoard}
+              onDeleteBoard={(boardId) => {
+                setSelectedBoardId(boardId);
+                setConfirmBoardDelete(true);
+              }}
             />
 
             <RoomMembers
               members={room.members}
               memberCount={room.memberCount}
               yourRole={room.yourRole}
+              onUpdateRole={handleUpdateMemberRole}
+              onRemoveMember={handleRemoveMember}
+              actionLoading={actionLoading}
             />
           </div>
         </section>
@@ -341,6 +590,57 @@ export default function RoomClient({ roomId }: RoomClientProps) {
           }
         }}
         onConfirm={handleSessionAction}
+      />
+
+      <CreateBoardModal
+        open={showCreateBoard}
+        name={boardName}
+        description={boardDescription}
+        type={boardType}
+        loading={boardLoading}
+        error={boardError}
+        onNameChange={setBoardName}
+        onDescriptionChange={setBoardDescription}
+        onTypeChange={setBoardType}
+        onClose={() => {
+          if (!boardLoading) {
+            setShowCreateBoard(false);
+          }
+        }}
+        onSubmit={handleCreateBoard}
+      />
+
+      <EditBoardModal
+        open={showEditBoard}
+        name={boardName}
+        description={boardDescription}
+        loading={boardLoading}
+        error={boardError}
+        onNameChange={setBoardName}
+        onDescriptionChange={setBoardDescription}
+        onClose={() => {
+          if (!boardLoading) {
+            setShowEditBoard(false);
+            setSelectedBoardId(null);
+          }
+        }}
+        onSubmit={handleUpdateBoard}
+      />
+
+      <ConfirmDialog
+        open={confirmBoardDelete}
+        title="Delete this board?"
+        description="This will permanently delete the board and its pages. This action cannot be undone."
+        confirmText="Delete Board"
+        destructive
+        loading={boardLoading}
+        onClose={() => {
+          if (!boardLoading) {
+            setConfirmBoardDelete(false);
+            setSelectedBoardId(null);
+          }
+        }}
+        onConfirm={handleDeleteBoard}
       />
     </>
   );

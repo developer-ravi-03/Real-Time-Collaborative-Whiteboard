@@ -1,5 +1,7 @@
 // src/components/room/RoomBoards.tsx
 
+"use client";
+
 import { Plus, LayoutDashboard } from "lucide-react";
 
 import type { RoomBoard, RoomRole } from "@/types/room";
@@ -10,12 +12,19 @@ type RoomBoardsProps = {
   boards: RoomBoard[];
   yourRole: RoomRole;
   isSessionActive: boolean;
+
+  onCreateBoard: () => void;
+  onEditBoard: (boardId: string) => void;
+  onDeleteBoard: (boardId: string) => void;
 };
 
 export function RoomBoards({
   boards,
   yourRole,
   isSessionActive,
+  onCreateBoard,
+  onEditBoard,
+  onDeleteBoard,
 }: RoomBoardsProps) {
   const canCreateBoard =
     (yourRole === "OWNER" || yourRole === "ADMIN" || yourRole === "EDITOR") &&
@@ -23,9 +32,10 @@ export function RoomBoards({
 
   return (
     <section>
-      <div className="mb-5 flex items-center justify-between">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-xl font-semibold">Boards</h2>
+          <h2 className="text-xl font-semibold tracking-tight">Boards</h2>
 
           <p className="mt-1 text-sm text-muted-foreground">
             Choose a board to start collaborating.
@@ -35,9 +45,11 @@ export function RoomBoards({
         {canCreateBoard && (
           <button
             type="button"
+            onClick={onCreateBoard}
             className="
               inline-flex
               h-10
+              shrink-0
               items-center
               gap-2
               rounded-xl
@@ -49,6 +61,7 @@ export function RoomBoards({
               transition
               hover:-translate-y-0.5
               hover:shadow-md
+              cursor-pointer
             "
           >
             <Plus className="h-4 w-4" />
@@ -57,9 +70,11 @@ export function RoomBoards({
         )}
       </div>
 
+      {/* Boards */}
       {boards.length === 0 ? (
         <div
           className="
+            mt-6
             flex
             min-h-64
             flex-col
@@ -87,16 +102,37 @@ export function RoomBoards({
           {canCreateBoard && (
             <button
               type="button"
-              className="mt-5 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground"
+              onClick={onCreateBoard}
+              className="
+                mt-5
+                rounded-xl
+                bg-primary
+                px-4
+                py-2.5
+                text-sm
+                font-semibold
+                text-primary-foreground
+                transition
+                hover:-translate-y-0.5
+                hover:shadow-md
+                cursor-pointer
+              "
             >
               Create your first board
             </button>
           )}
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="mt-6 grid gap-4 sm:grid-cols-2">
           {boards.map((board) => (
-            <RoomBoardCard key={board.id} board={board} yourRole={yourRole} />
+            <RoomBoardCard
+              key={board.id}
+              board={board}
+              yourRole={yourRole}
+              isSessionActive={isSessionActive}
+              onEdit={onEditBoard}
+              onDelete={onDeleteBoard}
+            />
           ))}
         </div>
       )}

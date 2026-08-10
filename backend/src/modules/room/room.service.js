@@ -214,8 +214,10 @@ class RoomService {
 
         memberships: {
           select: {
+            id: true,
             role: true,
             userId: true,
+            joinedAt: true,
 
             user: {
               select: {

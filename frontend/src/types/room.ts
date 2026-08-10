@@ -31,10 +31,6 @@ export type Room = {
   updatedAt: string;
 };
 
-// src/types/room.ts
-
-// export type RoomRole = "OWNER" | "ADMIN" | "EDITOR" | "VIEWER";
-
 export type BoardType = "INFINITE" | "SLIDES";
 
 export type RoomMember = {
@@ -93,6 +89,24 @@ export type RoomDetails = {
   members: RoomMember[];
 
   boards: RoomBoard[];
+
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type Board = {
+  id: string;
+  name: string;
+  description: string | null;
+  type: BoardType;
+  settings: unknown;
+  pageCount: number;
+
+  createdBy: {
+    id: string;
+    displayName: string;
+    imageUrl: string | null;
+  };
 
   createdAt: string;
   updatedAt: string;
