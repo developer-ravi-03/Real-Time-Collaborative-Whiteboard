@@ -20,6 +20,7 @@ import { EditPageModal } from "@/components/board/EditPageModal";
 import { DeletePageDialog } from "@/components/board/DeletePageDialog";
 import type { RoomRole } from "@/types/room";
 import { CreatePageModal } from "@/components/board/CreatePageModal";
+import { CanvasWorkspace } from "@/components/canvas/CanvasWorkspace";
 
 type BoardClientProps = {
   boardId: string;
@@ -376,7 +377,7 @@ export default function BoardClient({ boardId }: BoardClientProps) {
     <main className="flex h-screen flex-col overflow-hidden bg-background">
       <BoardHeader board={board} />
 
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         <BoardSidebar
           board={board}
           pages={pages}
@@ -398,19 +399,12 @@ export default function BoardClient({ boardId }: BoardClientProps) {
           }}
         />
 
-        <section className="min-w-0 flex-1">
-          {/* Canvas will come here */}
-          <div className="flex h-full items-center justify-center">
-            <div className="text-center">
-              <p className="text-lg font-semibold">
-                {currentPage?.title || `Page ${currentPage?.pageNumber || 1}`}
-              </p>
-
-              <p className="mt-2 text-sm text-muted-foreground">
-                Canvas coming next.
-              </p>
-            </div>
-          </div>
+        <section className="min-h-0 min-w-0 flex-1 overflow-hidden">
+          <CanvasWorkspace
+            board={board}
+            currentPage={currentPage}
+            canEdit={canEdit}
+          />
         </section>
       </div>
 

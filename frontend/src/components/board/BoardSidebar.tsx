@@ -85,11 +85,14 @@ export function BoardSidebar({
                   transition
                   ${
                     selected
-                      ? "border-primary/40 bg-primary/5"
-                      : "border-border hover:bg-muted/50"
+                      ? "border-primary bg-primary/10 ring-1 ring-primary/30"
+                      : "border-border hover:border-primary/30 hover:bg-muted/50"
                   }
                 `}
               >
+                {selected && (
+                  <div className="absolute right-3 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-primary" />
+                )}
                 <button
                   type="button"
                   onClick={() => {

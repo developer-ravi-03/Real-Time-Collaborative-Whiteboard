@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, MoreHorizontal, Check, Circle } from "lucide-react";
+import { ArrowLeft, MoreHorizontal, Check } from "lucide-react";
 
 import type { Board } from "@/types/board";
 
