@@ -217,7 +217,7 @@ class BoardService {
     return board;
   }
 
-  async getBoardInitialization(boardId) {
+  async getBoardInitialization(boardId, userId) {
     const board = await db.board.findUnique({
       where: {
         id: boardId,
@@ -229,6 +229,13 @@ class BoardService {
             id: true,
             displayName: true,
             imageUrl: true,
+          },
+        },
+
+        room: {
+          select: {
+            id: true,
+            isSessionActive: true,
           },
         },
 
@@ -250,7 +257,26 @@ class BoardService {
       throw new ApiError(404, "Board not found.");
     }
 
-    return board;
+    const membership = await db.roomMember.findUnique({
+      where: {
+        roomId_userId: {
+          roomId: board.roomId,
+          userId,
+        },
+      },
+      select: {
+        role: true,
+      },
+    });
+
+    if (!membership) {
+      throw new ApiError(403, "You are not a member of this room.");
+    }
+
+    return {
+      ...board,
+      yourRole: membership.role,
+    };
   }
   /* -------------------------------------------------------------------------- */
   /*                              Update Board                                  */

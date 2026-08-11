@@ -1,5 +1,7 @@
 export type BoardType = "INFINITE" | "SLIDES";
 
+import type { RoomRole } from "./room";
+
 export type Board = {
   id: string;
   roomId: string;
@@ -32,8 +34,13 @@ export type CurrentPage = BoardPage & {
   updatedAt: string;
 };
 
+
 export type BoardInitialization = {
   board: Board;
+
+  yourRole: RoomRole;
+
   pages: BoardPage[];
+
   currentPage: CurrentPage | null;
 };

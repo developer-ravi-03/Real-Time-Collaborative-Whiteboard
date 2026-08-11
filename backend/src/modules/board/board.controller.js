@@ -75,7 +75,10 @@ export const getBoardById = asyncHandler(async (req, res) => {
 /* -------------------------------------------------------------------------- */
 
 export const getBoardInitialization = asyncHandler(async (req, res) => {
-  const board = await BoardService.getBoardInitialization(req.board.id);
+  const board = await BoardService.getBoardInitialization(
+    req.board.id,
+    req.user.id,
+  );
 
   return res
     .status(200)

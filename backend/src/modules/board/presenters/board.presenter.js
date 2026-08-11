@@ -67,7 +67,9 @@ export const boardListPresenter = (boards) => {
 /* -------------------------------------------------------------------------- */
 
 export const boardInitializationPresenter = (board) => {
-  const currentPage = board.pages[0] ?? null;
+  const pages = [...board.pages].sort((a, b) => a.pageNumber - b.pageNumber);
+
+  const currentPage = pages[0] || null;
 
   return {
     board: {
@@ -83,20 +85,24 @@ export const boardInitializationPresenter = (board) => {
 
       settings: board.settings,
 
+      pageCount: board._count.pages,
+
       createdBy: {
         id: board.createdBy.id,
+
         displayName: board.createdBy.displayName,
+
         imageUrl: board.createdBy.imageUrl,
       },
-
-      pageCount: board._count.pages,
 
       createdAt: board.createdAt,
 
       updatedAt: board.updatedAt,
     },
 
-    pages: board.pages.map((page) => ({
+    yourRole: board.yourRole,
+
+    pages: pages.map((page) => ({
       id: page.id,
 
       pageNumber: page.pageNumber,
@@ -106,6 +112,8 @@ export const boardInitializationPresenter = (board) => {
       version: page.version,
 
       thumbnailUrl: page.thumbnailUrl,
+
+      updatedAt: page.updatedAt,
     })),
 
     currentPage: currentPage

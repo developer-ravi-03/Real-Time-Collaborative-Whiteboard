@@ -15,7 +15,8 @@ import {
 export const createPage = asyncHandler(async (req, res) => {
   const { boardId } = req.params;
 
-  const page = await PageService.createPage(boardId);
+  // const page = await PageService.createPage(boardId);
+  const page = await PageService.createPage(boardId, req.body);
 
   return res
     .status(201)

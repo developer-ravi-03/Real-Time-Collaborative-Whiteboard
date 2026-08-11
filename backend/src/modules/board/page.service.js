@@ -17,7 +17,7 @@ class PageService {
   /*                               Create Page                                  */
   /* -------------------------------------------------------------------------- */
 
-  async createPage(boardId) {
+  async createPage(boardId, pageData) {
     const board = await db.board.findUnique({
       where: {
         id: boardId,
@@ -50,7 +50,7 @@ class PageService {
 
         pageNumber: nextPageNumber,
 
-        title: null,
+        title: pageData.title.trim(),
 
         canvasData: this.getDefaultCanvasData(),
 
@@ -192,28 +192,29 @@ class PageService {
       throw new ApiError(404, "Page not found.");
     }
 
-    const totalPages = await db.boardPage.count({
-      where: {
-        boardId: page.boardId,
-      },
-    });
-
-    if (totalPages <= 1) {
-      throw new ApiError(400, "Cannot delete the last page of a board.");
-    }
-
     return await db.$transaction(async (tx) => {
+      const totalPages = await tx.boardPage.count({
+        where: {
+          boardId: page.boardId,
+        },
+      });
+
+      // A board must always have at least one page.
+      if (totalPages <= 1) {
+        throw new ApiError(400, "Cannot delete the last page of a board.");
+      }
+
       await tx.boardPage.delete({
         where: {
           id: pageId,
         },
       });
 
+      // Re-number remaining pages sequentially.
       const remainingPages = await tx.boardPage.findMany({
         where: {
           boardId: page.boardId,
         },
-
         orderBy: {
           pageNumber: "asc",
         },
@@ -224,12 +225,12 @@ class PageService {
           where: {
             id: remainingPages[index].id,
           },
-
           data: {
             pageNumber: index + 1,
           },
         });
       }
+
       return page;
     });
   }

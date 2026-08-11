@@ -109,6 +109,7 @@ router.post(
   requireAuth,
   loadBoard,
   requireRoomEditor,
+  validateRequest(createPageSchema),
   createPage,
 );
 
