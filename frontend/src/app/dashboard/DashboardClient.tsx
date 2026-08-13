@@ -210,7 +210,8 @@ export default function DashboardClient() {
       <main>
         <section className="mx-auto max-w-7xl px-6 py-10 sm:px-8">
           <DashboardHeader
-            firstName={user?.firstName}
+            // firstName={user?.firstName}
+            firstName={user?.firstName ?? undefined}
             onCreateRoom={() => {
               setCreateError(null);
               setShowCreateRoom(true);

@@ -3,20 +3,32 @@
 import { useCallback, useEffect, useState } from "react";
 
 import type { Board, CurrentPage } from "@/types/board";
+
 import type { CanvasTool } from "./canvas.types";
 
 import { SlideCanvas } from "./SlideCanvas";
+
 import { InfiniteCanvas } from "./InfiniteCanvas";
+
 import { CanvasToolbar } from "./CanvasToolbar";
+
+import {
+  DEFAULT_ERASER_SIZE,
+  ERASER_SIZES,
+  type EraserSize,
+} from "./CanvasEraser";
 
 type CanvasWorkspaceProps = {
   board: Board;
+
   currentPage: CurrentPage | null;
+
   canEdit: boolean;
 };
 
 type HistoryState = {
   canUndo: boolean;
+
   canRedo: boolean;
 };
 
@@ -25,10 +37,31 @@ export function CanvasWorkspace({
   currentPage,
   canEdit,
 }: CanvasWorkspaceProps) {
+  /*
+   * ==========================================================
+   * TOOL
+   * ==========================================================
+   */
+
   const [activeTool, setActiveTool] = useState<CanvasTool>("select");
+
+  /*
+   * ==========================================================
+   * ERASER SIZE
+   * ==========================================================
+   */
+
+  const [eraserSize, setEraserSize] = useState<EraserSize>(DEFAULT_ERASER_SIZE);
+
+  /*
+   * ==========================================================
+   * HISTORY
+   * ==========================================================
+   */
 
   const [historyState, setHistoryState] = useState<HistoryState>({
     canUndo: false,
+
     canRedo: false,
   });
 
@@ -36,9 +69,20 @@ export function CanvasWorkspace({
 
   const [redoAction, setRedoAction] = useState<(() => void) | null>(null);
 
+  /*
+   * ==========================================================
+   * HISTORY ACTION BRIDGE
+   * ==========================================================
+   */
+
   const handleHistoryActions = useCallback(
-    (actions: { undo: () => void; redo: () => void }) => {
+    (actions: {
+      undo: () => void;
+
+      redo: () => void;
+    }) => {
       setUndoAction(() => actions.undo);
+
       setRedoAction(() => actions.redo);
     },
     [],
@@ -56,6 +100,9 @@ export function CanvasWorkspace({
    * C = Circle
    * L = Line
    * T = Text
+   *
+   * [ = Smaller eraser
+   * ] = Larger eraser
    * ==========================================================
    */
 
@@ -88,13 +135,47 @@ export function CanvasWorkspace({
       }
 
       /*
-       * Undo / Redo are handled by InfiniteCanvas.
-       * Therefore don't process Z/Y here.
+       * Undo / redo belong to InfiniteCanvas.
        */
 
       if (event.ctrlKey || event.metaKey) {
         return;
       }
+
+      /*
+       * ======================================================
+       * ERASER SIZE SHORTCUTS
+       * ======================================================
+       */
+
+      if (activeTool === "eraser" && (event.key === "[" || event.key === "]")) {
+        const currentIndex = ERASER_SIZES.indexOf(eraserSize);
+
+        if (currentIndex === -1) {
+          return;
+        }
+
+        const nextIndex =
+          event.key === "["
+            ? Math.max(0, currentIndex - 1)
+            : Math.min(ERASER_SIZES.length - 1, currentIndex + 1);
+
+        const nextSize = ERASER_SIZES[nextIndex];
+
+        if (nextSize !== eraserSize) {
+          setEraserSize(nextSize);
+        }
+
+        event.preventDefault();
+
+        return;
+      }
+
+      /*
+       * ======================================================
+       * TOOL SHORTCUTS
+       * ======================================================
+       */
 
       let nextTool: CanvasTool | null = null;
 
@@ -145,7 +226,7 @@ export function CanvasWorkspace({
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [canEdit]);
+  }, [canEdit, activeTool, eraserSize]);
 
   /*
    * ==========================================================
@@ -200,6 +281,7 @@ export function CanvasWorkspace({
         canvasData={currentPage.canvasData}
         canEdit={canEdit}
         activeTool={activeTool}
+        eraserSize={eraserSize}
         onHistoryChange={setHistoryState}
         onHistoryActions={handleHistoryActions}
       />
@@ -207,6 +289,8 @@ export function CanvasWorkspace({
       <CanvasToolbar
         activeTool={activeTool}
         onToolChange={setActiveTool}
+        eraserSize={eraserSize}
+        onEraserSizeChange={setEraserSize}
         canEdit={canEdit}
         canUndo={historyState.canUndo}
         canRedo={historyState.canRedo}

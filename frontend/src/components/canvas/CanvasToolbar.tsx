@@ -15,22 +15,35 @@ import {
 
 import type { CanvasTool } from "./canvas.types";
 
+import { ERASER_SIZES, type EraserSize } from "./CanvasEraser";
+
 type CanvasToolbarProps = {
   activeTool: CanvasTool;
+
   onToolChange: (tool: CanvasTool) => void;
+
+  eraserSize: EraserSize;
+
+  onEraserSizeChange: (size: EraserSize) => void;
+
   canEdit: boolean;
 
   canUndo: boolean;
+
   canRedo: boolean;
 
   onUndo: () => void;
+
   onRedo: () => void;
 };
 
 type ToolConfig = {
   id: CanvasTool;
+
   label: string;
+
   icon: React.ReactNode;
+
   shortcut: string;
 };
 
@@ -88,6 +101,8 @@ const tools: ToolConfig[] = [
 export function CanvasToolbar({
   activeTool,
   onToolChange,
+  eraserSize,
+  onEraserSizeChange,
   canEdit,
   canUndo,
   canRedo,
@@ -95,15 +110,11 @@ export function CanvasToolbar({
   onRedo,
 }: CanvasToolbarProps) {
   /*
-   * Prevent the clicked toolbar button from keeping
-   * browser focus.
-   *
-   * This removes the second outline/highlight that appeared
-   * when:
-   *
-   * 1. Rectangle was clicked with mouse
-   * 2. Then Eraser was selected using keyboard
+   * ==========================================================
+   * REMOVE BUTTON FOCUS
+   * ==========================================================
    */
+
   const blurToolbarButton = () => {
     const activeElement = document.activeElement;
 
@@ -112,11 +123,23 @@ export function CanvasToolbar({
     }
   };
 
+  /*
+   * ==========================================================
+   * TOOL CHANGE
+   * ==========================================================
+   */
+
   const handleToolChange = (tool: CanvasTool) => {
     blurToolbarButton();
 
     onToolChange(tool);
   };
+
+  /*
+   * ==========================================================
+   * UNDO
+   * ==========================================================
+   */
 
   const handleUndo = () => {
     blurToolbarButton();
@@ -124,10 +147,28 @@ export function CanvasToolbar({
     onUndo();
   };
 
+  /*
+   * ==========================================================
+   * REDO
+   * ==========================================================
+   */
+
   const handleRedo = () => {
     blurToolbarButton();
 
     onRedo();
+  };
+
+  /*
+   * ==========================================================
+   * ERASER SIZE
+   * ==========================================================
+   */
+
+  const handleEraserSizeChange = (value: string) => {
+    const size = Number(value) as EraserSize;
+
+    onEraserSizeChange(size);
   };
 
   return (
@@ -259,10 +300,6 @@ export function CanvasToolbar({
             type="button"
             disabled={!canEdit}
             onMouseDown={(event) => {
-              /*
-               * Prevent browser from keeping focus on
-               * this toolbar button.
-               */
               event.preventDefault();
             }}
             onClick={() => handleToolChange(tool.id)}
@@ -324,6 +361,66 @@ export function CanvasToolbar({
           </button>
         );
       })}
+
+      {/* ====================================================
+          ERASER SIZE
+          ==================================================== */}
+
+      {activeTool === "eraser" && canEdit && (
+        <div
+          className="
+              ml-1
+              flex
+              items-center
+              border-l
+              border-white/10
+              pl-2
+            "
+        >
+          <label className="sr-only" htmlFor="eraser-size">
+            Eraser size
+          </label>
+
+          <select
+            id="eraser-size"
+            value={eraserSize}
+            onChange={(event) => handleEraserSizeChange(event.target.value)}
+            onMouseDown={(event) => {
+              event.stopPropagation();
+            }}
+            onBlur={blurToolbarButton}
+            className="
+                h-9
+                rounded-xl
+
+                border
+                border-white/10
+
+                bg-white/10
+
+                px-2
+
+                text-xs
+                font-medium
+                text-white
+
+                outline-none
+
+                transition
+
+                hover:bg-white/15
+              "
+            aria-label="Eraser size"
+            title="Eraser size"
+          >
+            {ERASER_SIZES.map((size) => (
+              <option key={size} value={size} className="bg-zinc-950">
+                {size}px
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
     </div>
   );
 }

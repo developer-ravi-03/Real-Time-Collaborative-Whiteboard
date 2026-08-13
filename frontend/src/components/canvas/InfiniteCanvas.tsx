@@ -8,7 +8,7 @@ import type { TPointerEvent, TPointerEventInfo } from "fabric";
 
 import type { CanvasTool } from "./canvas.types";
 
-import { CanvasEraser, ERASER_RADIUS, ERASER_WIDTH } from "./CanvasEraser";
+import { CanvasEraser, type EraserSize } from "./CanvasEraser";
 
 /*
  * ==========================================================
@@ -33,6 +33,8 @@ type InfiniteCanvasProps = {
 
   activeTool: CanvasTool;
 
+  eraserSize: EraserSize;
+
   onHistoryChange?: (state: HistoryState) => void;
 
   onHistoryActions?: (actions: HistoryActions) => void;
@@ -54,6 +56,68 @@ const PEN_WIDTH = 3;
 
 /*
  * ==========================================================
+ * PEN CURSOR
+ * ==========================================================
+ *
+ * IMPORTANT:
+ *
+ * Fabric's drawing mode uses:
+ *
+ *     freeDrawingCursor
+ *
+ * not only defaultCursor / hoverCursor.
+ *
+ * Therefore this cursor MUST be assigned to:
+ *
+ *     canvas.freeDrawingCursor
+ *
+ * otherwise Fabric falls back to "crosshair".
+ *
+ * ==========================================================
+ */
+
+const PEN_CURSOR_SVG = `
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="32"
+  height="32"
+  viewBox="0 0 32 32"
+>
+  <path
+    d="M7 23.5L20.8 9.7L25.3 14.2L11.5 28H7V23.5Z"
+    fill="white"
+    stroke="#111827"
+    stroke-width="1.8"
+    stroke-linejoin="round"
+  />
+
+  <path
+    d="M20.8 9.7L23.1 7.4C24 6.5 25.5 6.5 26.4 7.4L27.6 8.6C28.5 9.5 28.5 11 27.6 11.9L25.3 14.2"
+    fill="#e5e7eb"
+    stroke="#111827"
+    stroke-width="1.8"
+    stroke-linejoin="round"
+  />
+
+  <path
+    d="M7 28L11.5 28L7 23.5V28Z"
+    fill="#111827"
+  />
+
+  <path
+    d="M17.5 13L22 17.5"
+    stroke="#9ca3af"
+    stroke-width="1.5"
+  />
+</svg>
+`;
+
+const PEN_CURSOR = `url("data:image/svg+xml,${encodeURIComponent(
+  PEN_CURSOR_SVG,
+)}") 3 28, auto`;
+
+/*
+ * ==========================================================
  * COMPONENT
  * ==========================================================
  */
@@ -62,6 +126,7 @@ export function InfiniteCanvas({
   canvasData,
   canEdit,
   activeTool,
+  eraserSize,
   onHistoryChange,
   onHistoryActions,
 }: InfiniteCanvasProps) {
@@ -81,6 +146,14 @@ export function InfiniteCanvas({
 
   /*
    * ========================================================
+   * ERASER CURSOR
+   * ========================================================
+   */
+
+  const eraserCursorRef = useRef<HTMLDivElement | null>(null);
+
+  /*
+   * ========================================================
    * LATEST PROPS
    * ========================================================
    */
@@ -88,6 +161,8 @@ export function InfiniteCanvas({
   const activeToolRef = useRef<CanvasTool>(activeTool);
 
   const canEditRef = useRef<boolean>(canEdit);
+
+  const eraserSizeRef = useRef<EraserSize>(eraserSize);
 
   /*
    * ========================================================
@@ -157,11 +232,6 @@ export function InfiniteCanvas({
 
   const [zoom, setZoom] = useState(1);
 
-  const [eraserCursor, setEraserCursor] = useState<{
-    x: number;
-    y: number;
-  } | null>(null);
-
   /*
    * ========================================================
    * CALLBACK REF SYNC
@@ -189,6 +259,44 @@ export function InfiniteCanvas({
   useEffect(() => {
     canEditRef.current = canEdit;
   }, [canEdit]);
+
+  useEffect(() => {
+    eraserSizeRef.current = eraserSize;
+
+    eraserRef.current?.setSize(eraserSize);
+
+    const cursor = eraserCursorRef.current;
+
+    if (cursor) {
+      const currentZoom = fabricCanvasRef.current?.getZoom() ?? zoom;
+
+      const visualSize = eraserSize * currentZoom;
+
+      cursor.style.width = `${visualSize}px`;
+
+      cursor.style.height = `${visualSize}px`;
+    }
+  }, [eraserSize, zoom]);
+
+  /*
+   * ========================================================
+   * ERASER CURSOR VISIBILITY
+   * ========================================================
+   */
+
+  useEffect(() => {
+    const cursor = eraserCursorRef.current;
+
+    if (!cursor) {
+      return;
+    }
+
+    if (activeTool === "eraser" && canEdit) {
+      cursor.style.display = "block";
+    } else {
+      cursor.style.display = "none";
+    }
+  }, [activeTool, canEdit]);
 
   /*
    * ========================================================
@@ -221,10 +329,6 @@ export function InfiniteCanvas({
 
     const history = historyRef.current;
 
-    /*
-     * Avoid duplicate snapshots.
-     */
-
     if (history.length > 0 && history[history.length - 1] === snapshot) {
       return;
     }
@@ -234,10 +338,6 @@ export function InfiniteCanvas({
     if (history.length > MAX_HISTORY) {
       history.shift();
     }
-
-    /*
-     * New action clears redo.
-     */
 
     redoHistoryRef.current = [];
 
@@ -264,22 +364,12 @@ export function InfiniteCanvas({
 
       await canvas.loadFromJSON(JSON.parse(snapshot));
 
-      /*
-       * Every normal object should remain
-       * erasable after undo/redo.
-       */
-
       canvas.getObjects().forEach((object) => {
         object.set({
           erasable: true,
         });
 
         object.setCoords();
-
-        /*
-         * Keep an existing relative clipPath
-         * attached to the object.
-         */
 
         if (object.clipPath) {
           object.clipPath.set({
@@ -456,12 +546,31 @@ export function InfiniteCanvas({
     fabricCanvasRef.current = canvas;
 
     /*
+     * ======================================================
+     * IMPORTANT PEN CURSOR FIX
+     * ======================================================
+     *
+     * Fabric has a separate cursor specifically for
+     * free drawing mode.
+     *
+     * Default:
+     *
+     *     crosshair
+     *
+     * That is why the "+" was still appearing.
+     *
+     * We set it immediately after creating the canvas.
+     */
+
+    canvas.freeDrawingCursor = PEN_CURSOR;
+
+    /*
      * ------------------------------------------------------
      * CREATE ERASER
      * ------------------------------------------------------
      */
 
-    const eraser = new CanvasEraser(canvas);
+    const eraser = new CanvasEraser(canvas, eraserSizeRef.current);
 
     eraserRef.current = eraser;
 
@@ -478,10 +587,6 @@ export function InfiniteCanvas({
 
       return;
     }
-
-    /*
-     * Prevent browser gestures/text selection.
-     */
 
     interactionElement.style.cursor = "default";
 
@@ -532,10 +637,6 @@ export function InfiniteCanvas({
           return;
         }
 
-        /*
-         * Empty canvas.
-         */
-
         if (!canvasData || Object.keys(canvasData).length === 0) {
           historyRef.current = [JSON.stringify(canvas.toJSON())];
 
@@ -546,19 +647,11 @@ export function InfiniteCanvas({
           return;
         }
 
-        /*
-         * Load saved data.
-         */
-
         await canvas.loadFromJSON(canvasData);
 
         if (cancelled) {
           return;
         }
-
-        /*
-         * Restore object settings.
-         */
 
         canvas.getObjects().forEach((object) => {
           object.set({
@@ -567,15 +660,9 @@ export function InfiniteCanvas({
 
           object.setCoords();
 
-          /*
-           * Existing clipPath must never
-           * become selectable.
-           */
-
           if (object.clipPath) {
             object.clipPath.set({
               selectable: false,
-
               evented: false,
             });
 
@@ -583,19 +670,11 @@ export function InfiniteCanvas({
           }
         });
 
-        /*
-         * No object selected after loading.
-         */
-
         canvas.discardActiveObject();
 
         canvas.requestRenderAll();
 
         setZoom(canvas.getZoom());
-
-        /*
-         * Initial history.
-         */
 
         historyRef.current = [JSON.stringify(canvas.toJSON())];
 
@@ -615,22 +694,15 @@ export function InfiniteCanvas({
      * ======================================================
      * WHEEL
      * ======================================================
-     *
-     * Ctrl/Cmd + wheel:
-     *     Zoom
-     *
-     * Normal wheel:
-     *     Pan
-     * ======================================================
      */
 
     const handleWheel = (event: WheelEvent) => {
       event.preventDefault();
 
       /*
-       * ----------------------------------------------------
+       * ====================================================
        * ZOOM
-       * ----------------------------------------------------
+       * ====================================================
        */
 
       if (event.ctrlKey || event.metaKey) {
@@ -648,13 +720,27 @@ export function InfiniteCanvas({
 
         canvas.requestRenderAll();
 
+        /*
+         * Update eraser cursor size.
+         */
+
+        const cursor = eraserCursorRef.current;
+
+        if (cursor) {
+          const visualSize = eraserSizeRef.current * nextZoom;
+
+          cursor.style.width = `${visualSize}px`;
+
+          cursor.style.height = `${visualSize}px`;
+        }
+
         return;
       }
 
       /*
-       * ----------------------------------------------------
+       * ====================================================
        * PAN
-       * ----------------------------------------------------
+       * ====================================================
        */
 
       const transform = canvas.viewportTransform;
@@ -703,8 +789,6 @@ export function InfiniteCanvas({
         canvas.hoverCursor = "default";
 
         interactionElement.style.cursor = "default";
-
-        canvas.requestRenderAll();
 
         return;
       }
@@ -778,8 +862,6 @@ export function InfiniteCanvas({
 
         interactionElement.style.cursor = "grab";
 
-        canvas.requestRenderAll();
-
         return;
       }
 
@@ -806,11 +888,25 @@ export function InfiniteCanvas({
 
         canvas.freeDrawingBrush.color = "#111827";
 
-        canvas.defaultCursor = "crosshair";
+        /*
+         * ==================================================
+         * THE ACTUAL FIX
+         * ==================================================
+         *
+         * Fabric uses freeDrawingCursor while
+         * isDrawingMode === true.
+         *
+         * Without this line Fabric changes the cursor
+         * back to its default "crosshair".
+         */
 
-        canvas.hoverCursor = "crosshair";
+        canvas.freeDrawingCursor = PEN_CURSOR;
 
-        interactionElement.style.cursor = "crosshair";
+        canvas.defaultCursor = PEN_CURSOR;
+
+        canvas.hoverCursor = PEN_CURSOR;
+
+        interactionElement.style.cursor = PEN_CURSOR;
 
         canvas.requestRenderAll();
 
@@ -824,23 +920,11 @@ export function InfiniteCanvas({
        */
 
       if (tool === "eraser") {
-        /*
-         * IMPORTANT:
-         *
-         * Never allow Fabric's normal object
-         * targeting while eraser is active.
-         */
-
         canvas.isDrawingMode = false;
 
         canvas.selection = false;
 
         canvas.skipTargetFind = true;
-
-        /*
-         * If something was selected before entering
-         * eraser mode, remove the selection.
-         */
 
         canvas.discardActiveObject();
 
@@ -849,6 +933,18 @@ export function InfiniteCanvas({
         canvas.hoverCursor = "none";
 
         interactionElement.style.cursor = "none";
+
+        const cursor = eraserCursorRef.current;
+
+        if (cursor) {
+          const visualSize = eraserSizeRef.current * canvas.getZoom();
+
+          cursor.style.width = `${visualSize}px`;
+
+          cursor.style.height = `${visualSize}px`;
+
+          cursor.style.display = "block";
+        }
 
         canvas.requestRenderAll();
 
@@ -981,16 +1077,11 @@ export function InfiniteCanvas({
 
       /*
        * ====================================================
-       * ERASER START
+       * ERASER
        * ====================================================
        */
 
       if (activeToolRef.current === "eraser") {
-        /*
-         * Absolute protection against Fabric
-         * selecting an object.
-         */
-
         canvas.selection = false;
 
         canvas.skipTargetFind = true;
@@ -1195,11 +1286,25 @@ export function InfiniteCanvas({
        */
 
       if (activeToolRef.current === "eraser" && canEditRef.current) {
-        setEraserCursor({
-          x: event.viewportPoint.x,
+        const cursor = eraserCursorRef.current;
 
-          y: event.viewportPoint.y,
-        });
+        if (cursor) {
+          const zoomValue = canvas.getZoom();
+
+          const visualSize = eraserSizeRef.current * zoomValue;
+
+          cursor.style.width = `${visualSize}px`;
+
+          cursor.style.height = `${visualSize}px`;
+
+          cursor.style.left = `${event.viewportPoint.x}px`;
+
+          cursor.style.top = `${event.viewportPoint.y}px`;
+
+          cursor.style.transform = "translate3d(-50%, -50%, 0)";
+
+          cursor.style.opacity = "1";
+        }
       }
 
       /*
@@ -1262,9 +1367,6 @@ export function InfiniteCanvas({
          * --------------------------------------------------
          * CIRCLE
          * --------------------------------------------------
-         *
-         * The starting point and current point define
-         * the bounding box.
          */
 
         if (current instanceof Circle) {
@@ -1294,7 +1396,6 @@ export function InfiniteCanvas({
         if (current instanceof Line) {
           current.set({
             x2: pointer.x,
-
             y2: pointer.y,
           });
 
@@ -1349,12 +1450,10 @@ export function InfiniteCanvas({
      */
 
     const handleMouseOut = () => {
-      /*
-       * Do not modify Fabric tool state here.
-       */
+      const cursor = eraserCursorRef.current;
 
-      if (!isErasingRef.current) {
-        setEraserCursor(null);
+      if (cursor) {
+        cursor.style.opacity = "0";
       }
     };
 
@@ -1403,29 +1502,17 @@ export function InfiniteCanvas({
         if (shape) {
           shape.setCoords();
 
-          /*
-           * Tiny rectangle.
-           */
-
           if (shape instanceof Rect) {
             if ((shape.width ?? 0) < 2 || (shape.height ?? 0) < 2) {
               canvas.remove(shape);
             }
           }
 
-          /*
-           * Tiny circle.
-           */
-
           if (shape instanceof Circle) {
             if ((shape.radius ?? 0) < 2) {
               canvas.remove(shape);
             }
           }
-
-          /*
-           * Tiny line.
-           */
 
           if (shape instanceof Line) {
             const dx = (shape.x2 ?? 0) - (shape.x1 ?? 0);
@@ -1503,13 +1590,6 @@ export function InfiniteCanvas({
         return;
       }
 
-      /*
-       * Important for erased objects:
-       *
-       * The relative clipPath must remain attached
-       * to the object after move / scale / rotate.
-       */
-
       const activeObjects = canvas.getActiveObjects();
 
       activeObjects.forEach((object) => {
@@ -1550,10 +1630,6 @@ export function InfiniteCanvas({
 
       const target = event.target as HTMLElement | null;
 
-      /*
-       * Don't delete while typing.
-       */
-
       if (
         target?.tagName === "INPUT" ||
         target?.tagName === "TEXTAREA" ||
@@ -1572,18 +1648,6 @@ export function InfiniteCanvas({
         return;
       }
 
-      /*
-       * IMPORTANT:
-       *
-       * Remove focus from toolbar buttons.
-       *
-       * This fixes the situation where:
-       *
-       * Eraser = active white button
-       *
-       * Rectangle = also showing keyboard/focus outline
-       */
-
       const focusedElement = document.activeElement;
 
       if (focusedElement instanceof HTMLElement) {
@@ -1592,39 +1656,21 @@ export function InfiniteCanvas({
 
       const activeObjects = canvas.getActiveObjects();
 
-      /*
-       * Nothing selected.
-       */
-
       if (activeObjects.length === 0) {
         return;
       }
 
       event.preventDefault();
 
-      /*
-       * Delete selected objects.
-       */
-
       activeObjects.forEach((object) => {
         canvas.remove(object);
       });
-
-      /*
-       * CRITICAL:
-       *
-       * Remove selection immediately.
-       */
 
       canvas.discardActiveObject();
 
       canvas.selection = false;
 
       canvas.requestRenderAll();
-
-      /*
-       * Restore current tool mode.
-       */
 
       updateToolMode();
 
@@ -1658,10 +1704,6 @@ export function InfiniteCanvas({
         return;
       }
 
-      /*
-       * Ctrl/Cmd + Z
-       */
-
       if (event.key.toLowerCase() === "z") {
         event.preventDefault();
 
@@ -1673,10 +1715,6 @@ export function InfiniteCanvas({
 
         return;
       }
-
-      /*
-       * Ctrl/Cmd + Y
-       */
 
       if (event.key.toLowerCase() === "y") {
         event.preventDefault();
@@ -1720,10 +1758,6 @@ export function InfiniteCanvas({
 
       spacePressedRef.current = false;
 
-      /*
-       * If we were panning, stop it.
-       */
-
       isPanningRef.current = false;
 
       updateToolMode();
@@ -1752,12 +1786,11 @@ export function InfiniteCanvas({
         eraserRef.current?.cancel();
       }
 
-      /*
-       * This is an event callback,
-       * so clearing React state here is safe.
-       */
+      const cursor = eraserCursorRef.current;
 
-      setEraserCursor(null);
+      if (cursor) {
+        cursor.style.opacity = "0";
+      }
 
       updateToolMode();
     };
@@ -1818,6 +1851,19 @@ export function InfiniteCanvas({
 
     canEditRef.current = canEdit;
 
+    eraserSizeRef.current = eraserSize;
+
+    eraser.setSize(eraserSize);
+
+    /*
+     * IMPORTANT:
+     *
+     * Set Fabric drawing cursor before
+     * updateToolMode() is called.
+     */
+
+    canvas.freeDrawingCursor = PEN_CURSOR;
+
     updateToolMode();
 
     /*
@@ -1872,18 +1918,6 @@ export function InfiniteCanvas({
   /*
    * ==========================================================
    * TOOL MODE EFFECT
-   * ==========================================================
-   *
-   * IMPORTANT:
-   *
-   * No setEraserCursor() here.
-   *
-   * This prevents React's:
-   *
-   * "Calling setState synchronously within an effect"
-   *
-   * warning.
-   *
    * ==========================================================
    */
 
@@ -2025,11 +2059,23 @@ export function InfiniteCanvas({
 
       canvas.freeDrawingBrush.color = "#111827";
 
-      canvas.defaultCursor = "crosshair";
+      /*
+       * ==================================================
+       * CRITICAL FIX
+       * ==================================================
+       *
+       * Fabric's free drawing mode has its own cursor.
+       *
+       * This was the missing property.
+       */
 
-      canvas.hoverCursor = "crosshair";
+      canvas.freeDrawingCursor = PEN_CURSOR;
 
-      interactionElement.style.cursor = "crosshair";
+      canvas.defaultCursor = PEN_CURSOR;
+
+      canvas.hoverCursor = PEN_CURSOR;
+
+      interactionElement.style.cursor = PEN_CURSOR;
 
       canvas.requestRenderAll();
 
@@ -2043,13 +2089,6 @@ export function InfiniteCanvas({
      */
 
     if (activeTool === "eraser") {
-      /*
-       * This is the most important part.
-       *
-       * Fabric is completely prevented from
-       * targeting objects while erasing.
-       */
-
       canvas.isDrawingMode = false;
 
       canvas.selection = false;
@@ -2063,6 +2102,18 @@ export function InfiniteCanvas({
       canvas.hoverCursor = "none";
 
       interactionElement.style.cursor = "none";
+
+      const cursor = eraserCursorRef.current;
+
+      if (cursor) {
+        const visualSize = eraserSize * canvas.getZoom();
+
+        cursor.style.width = `${visualSize}px`;
+
+        cursor.style.height = `${visualSize}px`;
+
+        cursor.style.display = "block";
+      }
 
       canvas.requestRenderAll();
 
@@ -2097,7 +2148,7 @@ export function InfiniteCanvas({
 
       canvas.requestRenderAll();
     }
-  }, [activeTool, canEdit]);
+  }, [activeTool, canEdit, eraserSize]);
 
   /*
    * ==========================================================
@@ -2129,28 +2180,43 @@ export function InfiniteCanvas({
           ERASER CURSOR
           ==================================================== */}
 
-      {activeTool === "eraser" && canEdit && eraserCursor && (
-        <div
-          className="
-              pointer-events-none
-              absolute
-              z-50
-              rounded-full
-              border-2
-              border-slate-700
-              bg-white/20
-            "
-          style={{
-            width: ERASER_WIDTH,
+      <div
+        ref={eraserCursorRef}
+        aria-hidden="true"
+        className="
+          pointer-events-none
+          absolute
+          z-50
 
-            height: ERASER_WIDTH,
+          rounded-full
 
-            left: eraserCursor.x - ERASER_RADIUS,
+          border-2
+          border-slate-700
 
-            top: eraserCursor.y - ERASER_RADIUS,
-          }}
-        />
-      )}
+          bg-white/20
+
+          opacity-0
+
+          shadow-sm
+
+          will-change-transform
+        "
+        style={{
+          display: activeTool === "eraser" && canEdit ? "block" : "none",
+
+          width: eraserSize * zoom,
+
+          height: eraserSize * zoom,
+
+          left: 0,
+
+          top: 0,
+
+          transform: "translate3d(-50%, -50%, 0)",
+
+          transition: "width 80ms ease-out, height 80ms ease-out",
+        }}
+      />
 
       {/* ====================================================
           ZOOM
@@ -2163,15 +2229,21 @@ export function InfiniteCanvas({
           bottom-4
           right-4
           z-20
+
           rounded-lg
+
           border
           border-border
+
           bg-background/90
+
           px-3
           py-2
+
           text-xs
           font-medium
           text-muted-foreground
+
           shadow
           backdrop-blur
         "
@@ -2187,25 +2259,33 @@ export function InfiniteCanvas({
         <div
           className="
               pointer-events-none
+
               absolute
               bottom-4
               left-1/2
               z-20
+
               -translate-x-1/2
+
               rounded-lg
+
               border
               border-border
+
               bg-background/90
+
               px-3
               py-2
+
               text-xs
               font-medium
               text-muted-foreground
+
               shadow
               backdrop-blur
             "
         >
-          Eraser · {ERASER_WIDTH}px
+          Eraser · {eraserSize}px
         </div>
       )}
     </div>

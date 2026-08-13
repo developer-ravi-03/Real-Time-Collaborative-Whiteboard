@@ -13,9 +13,11 @@ import {
  * ==========================================================
  */
 
-export const ERASER_WIDTH = 28;
+export const ERASER_SIZES = [12, 20, 28, 40, 60, 80] as const;
 
-export const ERASER_RADIUS = ERASER_WIDTH / 2;
+export const DEFAULT_ERASER_SIZE = 28;
+
+export type EraserSize = (typeof ERASER_SIZES)[number];
 
 /*
  * ==========================================================
@@ -39,31 +41,24 @@ type EraserGroup = Group & {
  *
  * Fabric 7.4.0
  *
- * We intentionally do NOT use:
+ * We intentionally do NOT use EraserBrush because it is not
+ * available from the normal "fabric" package export in the
+ * current setup.
  *
- *     EraserBrush
+ * Instead we use:
  *
- * because it is not available from the normal "fabric"
- * package export in the current setup.
+ * Object
+ *    ↓
+ * relative inverted clipPath
+ *    ↓
+ * eraser circles
  *
- * We also do NOT use:
+ * The eraser point starts in scene coordinates and is converted
+ * into the object's local coordinate system before creating the
+ * clip circle.
  *
- *     absolutePositioned: true
- *
- * because that makes the clipPath stay fixed to the canvas
- * while the object moves.
- *
- * Instead:
- *
- *     Object
- *       ↓
- *     relative inverted clipPath
- *       ↓
- *     eraser circles
- *
- * The eraser coordinates are converted from scene space to
- * the object's local coordinate system using Fabric's matrix
- * utilities.
+ * This allows the erased area to remain attached correctly
+ * when the object is moved, scaled or rotated.
  *
  * ==========================================================
  */
@@ -77,6 +72,8 @@ export class CanvasEraser {
 
   private lastPoint: EraserPoint | null = null;
 
+  private size: EraserSize;
+
   /*
    * One eraser group for every object.
    */
@@ -85,8 +82,39 @@ export class CanvasEraser {
     EraserGroup
   >();
 
-  constructor(canvas: Canvas) {
+  /*
+   * ========================================================
+   * CONSTRUCTOR
+   * ========================================================
+   */
+
+  constructor(
+    canvas: Canvas,
+    size: EraserSize = DEFAULT_ERASER_SIZE,
+  ) {
     this.canvas = canvas;
+
+    this.size = size;
+  }
+
+  /*
+   * ========================================================
+   * SET SIZE
+   * ========================================================
+   */
+
+  setSize(size: EraserSize): void {
+    this.size = size;
+  }
+
+  /*
+   * ========================================================
+   * GET SIZE
+   * ========================================================
+   */
+
+  getSize(): EraserSize {
+    return this.size;
   }
 
   /*
@@ -126,7 +154,7 @@ export class CanvasEraser {
        * Ignore extremely small movements.
        *
        * This prevents creating thousands of clip circles
-       * during one eraser stroke.
+       * during a single eraser stroke.
        */
       if (distance < 4) {
         return false;
@@ -153,8 +181,9 @@ export class CanvasEraser {
     this.lastPoint = null;
 
     /*
-     * Refresh all changed objects.
+     * Refresh every changed object.
      */
+
     for (const object of this.changedObjects) {
       object.set({
         dirty: true,
@@ -231,7 +260,7 @@ export class CanvasEraser {
         }
 
         /*
-         * Ignore our internal eraser objects.
+         * Ignore internal SyncBoard eraser objects.
          */
         if (
           object.get(
@@ -246,7 +275,7 @@ export class CanvasEraser {
 
     for (const object of objects) {
       /*
-       * First perform a quick hit test.
+       * Quick hit test.
        */
       if (!this.touchesObject(object, point)) {
         continue;
@@ -254,23 +283,13 @@ export class CanvasEraser {
 
       /*
        * ----------------------------------------------------
-       * CONVERT SCENE POINT → OBJECT LOCAL POINT
+       * SCENE → OBJECT LOCAL COORDINATES
        * ----------------------------------------------------
        *
-       * Fabric 7 does NOT expose:
-       *
-       *     object.toLocalPoint()
+       * Fabric 7 does not expose toLocalPoint() on
+       * FabricObject in our current TypeScript setup.
        *
        * Therefore we use Fabric's public matrix utilities.
-       *
-       * calcTransformMatrix()
-       * gives us the object's complete transform.
-       *
-       * invertTransform()
-       * gives us the inverse matrix.
-       *
-       * transformPoint()
-       * converts the scene point into local coordinates.
        */
 
       const objectMatrix =
@@ -292,11 +311,14 @@ export class CanvasEraser {
 
       /*
        * ----------------------------------------------------
-       * ERASER RADIUS
+       * LOCAL ERASER RADIUS
        * ----------------------------------------------------
        *
-       * Because the point is now in object-local space,
-       * compensate for the object's scale.
+       * The configured eraser size is expressed in screen/
+       * scene pixels.
+       *
+       * After converting into local coordinates we compensate
+       * for object scaling.
        */
 
       const scaleX =
@@ -309,8 +331,7 @@ export class CanvasEraser {
         (scaleX + scaleY) / 2 || 1;
 
       const localRadius =
-        ERASER_RADIUS /
-        averageScale;
+        this.size / 2 / averageScale;
 
       /*
        * ----------------------------------------------------
@@ -336,9 +357,7 @@ export class CanvasEraser {
         circle,
       );
 
-      this.changedObjects.add(
-        object,
-      );
+      this.changedObjects.add(object);
 
       changed = true;
     }
@@ -386,7 +405,8 @@ export class CanvasEraser {
       objectCaching: false,
 
       /*
-       * Internal object.
+       * Internal clip object should never
+       * itself be erasable.
        */
       erasable: false,
     });
@@ -404,10 +424,9 @@ export class CanvasEraser {
     /*
      * First use our WeakMap.
      */
+
     const cached =
-      this.eraserGroups.get(
-        object,
-      );
+      this.eraserGroups.get(object);
 
     if (cached) {
       return cached;
@@ -417,6 +436,7 @@ export class CanvasEraser {
      * Try to recover an existing SyncBoard
      * eraser clipPath from loaded JSON.
      */
+
     const existingClip =
       object.clipPath;
 
@@ -427,14 +447,12 @@ export class CanvasEraser {
       ) === true
     ) {
       /*
-       * IMPORTANT:
+       * Older implementation may have used
+       * absolutePositioned: true.
        *
-       * Old implementation may have used:
-       *
-       *     absolutePositioned: true
-       *
-       * Convert it to relative mode.
+       * Convert it to the current relative mode.
        */
+
       existingClip.set({
         absolutePositioned: false,
 
@@ -470,9 +488,7 @@ export class CanvasEraser {
     circle: Circle,
   ): void {
     let group =
-      this.getEraserGroup(
-        object,
-      );
+      this.getEraserGroup(object);
 
     /*
      * ======================================================
@@ -486,25 +502,18 @@ export class CanvasEraser {
           [circle],
           {
             /*
-             * CRITICAL:
-             *
              * The clipPath follows the object.
              */
             absolutePositioned: false,
 
             /*
-             * Inverted clip:
-             *
-             * everything OUTSIDE the circles
+             * Everything outside the eraser circles
              * remains visible.
              */
             inverted: true,
 
             /*
-             * IMPORTANT:
-             *
-             * ClipPath coordinate 0,0 is aligned with
-             * the object's center.
+             * Local origin.
              */
             originX: "center",
 
@@ -523,8 +532,9 @@ export class CanvasEraser {
       });
 
       /*
-       * Attach clip path.
+       * Attach clipPath.
        */
+
       object.set({
         clipPath: group,
       });
@@ -532,6 +542,7 @@ export class CanvasEraser {
       /*
        * Save reference.
        */
+
       this.eraserGroups.set(
         object,
         group,
@@ -569,6 +580,7 @@ export class CanvasEraser {
     /*
      * Add the new local-space eraser circle.
      */
+
     group.add(circle);
 
     group.set({
@@ -595,13 +607,16 @@ export class CanvasEraser {
     point: EraserPoint,
   ): boolean {
     /*
-     * ------------------------------------------------------
+     * ======================================================
      * QUICK BOUNDING BOX TEST
-     * ------------------------------------------------------
+     * ======================================================
      */
 
     const bounds =
       object.getBoundingRect();
+
+    const radius =
+      this.size / 2;
 
     const closestX =
       Math.max(
@@ -636,32 +651,44 @@ export class CanvasEraser {
       dy * dy;
 
     /*
-     * Completely outside bounding box.
+     * Completely outside the bounding box.
      */
+
     if (
       distanceSquared >
-      ERASER_RADIUS *
-        ERASER_RADIUS
+      radius * radius
     ) {
       return false;
     }
 
     /*
-     * ------------------------------------------------------
-     * FABRIC GEOMETRY TEST
-     * ------------------------------------------------------
+     * ======================================================
+     * PRECISE FABRIC INTERSECTION
+     * ======================================================
      */
 
-    const probe =
-      this.createEraserCircle(
-        point.x,
-        point.y,
-        ERASER_RADIUS,
-      );
-
-    probe.setCoords();
-
     try {
+      const probe =
+        new Circle({
+          left: point.x,
+
+          top: point.y,
+
+          radius,
+
+          originX: "center",
+
+          originY: "center",
+
+          selectable: false,
+
+          evented: false,
+
+          objectCaching: false,
+        });
+
+      probe.setCoords();
+
       if (
         object.intersectsWithObject(
           probe,
@@ -671,14 +698,13 @@ export class CanvasEraser {
       }
     } catch {
       /*
-       * If Fabric geometry throws,
-       * bounding-box result is used.
+       * Bounding-box result above is used as fallback.
        */
     }
 
-    /*
-     * Bounding-box fallback.
-     */
-    return true;
+    return (
+      distanceSquared <=
+      radius * radius
+    );
   }
 }
