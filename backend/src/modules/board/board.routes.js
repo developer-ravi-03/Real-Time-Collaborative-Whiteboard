@@ -18,12 +18,17 @@ import {
   getPages,
   getPageById,
   updatePage,
+  saveCanvas,
   deletePage,
 } from "./page.controller.js";
 
 import { createBoardSchema, updateBoardSchema } from "./board.validation.js";
 
-import { createPageSchema, updatePageSchema } from "./page.validation.js";
+import {
+  createPageSchema,
+  updatePageSchema,
+  saveCanvasSchema,
+} from "./page.validation.js";
 
 import {
   loadRoom,
@@ -96,14 +101,6 @@ router.delete(
 /*                                    Pages                                   */
 /* -------------------------------------------------------------------------- */
 
-// router.post(
-//   "/boards/:boardId/pages",
-//   requireAuth,
-//   loadBoard,
-//   requireRoomEditor,
-//   createPage,
-// );
-
 router.post(
   "/boards/:boardId/pages",
   requireAuth,
@@ -138,6 +135,19 @@ router.patch(
   updatePage,
 );
 
+/* -------------------------------------------------------------------------- */
+/*                              Canvas Persistence                            */
+/* -------------------------------------------------------------------------- */
+
+router.patch(
+  "/pages/:pageId/canvas",
+  requireAuth,
+  loadPage,
+  requireRoomEditor,
+  validateRequest(saveCanvasSchema),
+  saveCanvas,
+);
+
 router.delete(
   "/pages/:pageId",
   requireAuth,
@@ -145,4 +155,5 @@ router.delete(
   requireRoomAdmin,
   deletePage,
 );
+
 export default router;

@@ -15,8 +15,7 @@ import {
 export const createPage = asyncHandler(async (req, res) => {
   const { boardId } = req.params;
 
-  // const page = await PageService.createPage(boardId);
-  const page = await PageService.createPage(boardId, req.body);
+  const page = await PageService.createPage(boardId);
 
   return res
     .status(201)
@@ -54,9 +53,6 @@ export const getPages = asyncHandler(async (req, res) => {
 /* -------------------------------------------------------------------------- */
 
 export const getPageById = asyncHandler(async (req, res) => {
-  // const { pageId } = req.params;
-
-  // const page = await PageService.getPageById(pageId);
   const page = await PageService.getPageDetails(req.page.id);
 
   return res
@@ -75,16 +71,32 @@ export const getPageById = asyncHandler(async (req, res) => {
 /* -------------------------------------------------------------------------- */
 
 export const updatePage = asyncHandler(async (req, res) => {
-  // const { pageId } = req.params;
-
-  // const page = await PageService.updatePage(pageId, req.body);
   const page = await PageService.updatePage(req.page.id, req.body);
+
   return res
     .status(200)
     .json(
       new ApiResponse(
         200,
         "Page updated successfully.",
+        pageDetailsPresenter(page),
+      ),
+    );
+});
+
+/* -------------------------------------------------------------------------- */
+/*                              Save Canvas                                   */
+/* -------------------------------------------------------------------------- */
+
+export const saveCanvas = asyncHandler(async (req, res) => {
+  const page = await PageService.saveCanvas(req.page.id, req.body.canvasData);
+
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(
+        200,
+        "Canvas saved successfully.",
         pageDetailsPresenter(page),
       ),
     );
