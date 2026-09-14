@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { useAuth } from "@clerk/nextjs";
+
 import type { Board, CurrentPage } from "@/types/board";
 
 import type { CanvasTool } from "./canvas.types";
@@ -13,6 +15,17 @@ import { InfiniteCanvas } from "./InfiniteCanvas";
 import { CanvasToolbar } from "./CanvasToolbar";
 
 import { DEFAULT_ERASER_SIZE, type EraserSize } from "./CanvasEraser";
+
+import {
+  useCanvasPersistence,
+  type CanvasSaveStatus,
+} from "@/hooks/useCanvasPersistence";
+
+/*
+ * ==========================================================
+ * TYPES
+ * ==========================================================
+ */
 
 type CanvasWorkspaceProps = {
   board: Board;
@@ -36,14 +49,196 @@ type HistoryActions = {
   addImage: (file: File) => Promise<void>;
 };
 
+/*
+ * ==========================================================
+ * SAVE STATUS
+ * ==========================================================
+ */
+
+function SaveStatus({
+  status,
+  isDirty,
+  onRetry,
+}: {
+  status: CanvasSaveStatus;
+
+  isDirty: boolean;
+
+  onRetry: () => void;
+}) {
+  /*
+   * Saved
+   */
+
+  if (status === "saved") {
+    return (
+      <div
+        className="
+          pointer-events-none
+          rounded-lg
+          border
+          border-border
+          bg-background/95
+          px-3
+          py-2
+          text-xs
+          font-medium
+          text-foreground
+          shadow-lg
+          backdrop-blur
+        "
+      >
+        <span className="mr-1.5 text-emerald-500">✓</span>
+        Saved just now
+      </div>
+    );
+  }
+
+  /*
+   * Saving
+   */
+
+  if (status === "saving") {
+    return (
+      <div
+        className="
+          pointer-events-none
+          rounded-lg
+          border
+          border-border
+          bg-background/95
+          px-3
+          py-2
+          text-xs
+          font-medium
+          text-muted-foreground
+          shadow-lg
+          backdrop-blur
+        "
+      >
+        Saving...
+      </div>
+    );
+  }
+
+  /*
+   * Error
+   */
+
+  if (status === "error") {
+    return (
+      <div
+        className="
+          flex
+          items-center
+          gap-2
+          rounded-lg
+          border
+          border-destructive/30
+          bg-background/95
+          px-3
+          py-2
+          text-xs
+          font-medium
+          text-destructive
+          shadow-lg
+          backdrop-blur
+        "
+      >
+        <span>⚠ Save failed</span>
+
+        <button
+          type="button"
+          onClick={onRetry}
+          className="
+            pointer-events-auto
+            rounded
+            px-1.5
+            py-0.5
+            underline
+            underline-offset-2
+            hover:bg-muted
+          "
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  /*
+   * Unsaved
+   */
+
+  if (status === "unsaved" || isDirty) {
+    return (
+      <div
+        className="
+          pointer-events-none
+          rounded-lg
+          border
+          border-border
+          bg-background/95
+          px-3
+          py-2
+          text-xs
+          font-medium
+          text-muted-foreground
+          shadow-lg
+          backdrop-blur
+        "
+      >
+        Unsaved changes
+      </div>
+    );
+  }
+
+  /*
+   * Idle
+   *
+   * We intentionally render nothing here.
+   *
+   * This prevents a newly opened page from incorrectly
+   * showing "Unsaved changes".
+   */
+
+  return null;
+}
+
+/*
+ * ==========================================================
+ * COMPONENT
+ * ==========================================================
+ */
+
 export function CanvasWorkspace({
   board,
   currentPage,
   canEdit,
 }: CanvasWorkspaceProps) {
+  /*
+   * ========================================================
+   * AUTH
+   * ========================================================
+   */
+
+  const { getToken, isLoaded, isSignedIn } = useAuth();
+
+  /*
+   * ========================================================
+   * TOOL STATE
+   * ========================================================
+   */
+
   const [activeTool, setActiveTool] = useState<CanvasTool>("select");
 
   const [eraserSize, setEraserSize] = useState<EraserSize>(DEFAULT_ERASER_SIZE);
+
+  /*
+   * ========================================================
+   * HISTORY STATE
+   * ========================================================
+   */
 
   const [historyState, setHistoryState] = useState<HistoryState>({
     canUndo: false,
@@ -59,9 +254,23 @@ export function CanvasWorkspace({
   >(null);
 
   /*
-   * ==========================================================
+   * ========================================================
+   * CANVAS PERSISTENCE
+   * ========================================================
+   */
+
+  const persistence = useCanvasPersistence({
+    pageId: currentPage?.id ?? null,
+
+    getToken,
+
+    enabled: canEdit && isLoaded && Boolean(isSignedIn),
+  });
+
+  /*
+   * ========================================================
    * HISTORY / CANVAS ACTION BRIDGE
-   * ==========================================================
+   * ========================================================
    */
 
   const handleHistoryActions = useCallback((actions: HistoryActions) => {
@@ -73,9 +282,30 @@ export function CanvasWorkspace({
   }, []);
 
   /*
-   * ==========================================================
+   * ========================================================
+   * CANVAS CHANGE
+   * ========================================================
+   */
+
+  const handleCanvasChange = useCallback(
+    (canvasData: Record<string, unknown>) => {
+      if (!canEdit) {
+        return;
+      }
+
+      if (!isLoaded || !isSignedIn) {
+        return;
+      }
+
+      persistence.markDirty(canvasData);
+    },
+    [canEdit, isLoaded, isSignedIn, persistence.markDirty],
+  );
+
+  /*
+   * ========================================================
    * IMAGE UPLOAD
-   * ==========================================================
+   * ========================================================
    */
 
   const handleImageUpload = useCallback(
@@ -94,11 +324,10 @@ export function CanvasWorkspace({
         await addImageAction(file);
 
         /*
-         * Image insertion is an action, not a persistent
-         * interaction mode.
-         *
-         * Therefore return to Select automatically.
+         * Image insertion is an action, not
+         * a persistent interaction mode.
          */
+
         setActiveTool("select");
       } catch (error) {
         console.error("Failed to add image:", error);
@@ -113,20 +342,9 @@ export function CanvasWorkspace({
   );
 
   /*
-   * ==========================================================
+   * ========================================================
    * PASTE IMAGE
-   * ==========================================================
-   *
-   * Ctrl/Cmd + V can directly insert an image
-   * copied from:
-   *
-   * - Screenshot
-   * - Browser
-   * - Image editor
-   * - File explorer
-   *
-   * Text paste is completely untouched.
-   * ==========================================================
+   * ========================================================
    */
 
   useEffect(() => {
@@ -168,8 +386,9 @@ export function CanvasWorkspace({
   }, [canEdit, handleImageUpload]);
 
   /*
-   * ==========================================================
+   * ========================================================
    * KEYBOARD TOOL SHORTCUTS
+   * ========================================================
    *
    * V = Select
    * H = Hand
@@ -179,7 +398,7 @@ export function CanvasWorkspace({
    * C = Circle
    * L = Line
    * T = Text
-   * ==========================================================
+   * ========================================================
    */
 
   useEffect(() => {
@@ -190,10 +409,6 @@ export function CanvasWorkspace({
     const handleKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
 
-      /*
-       * Don't trigger shortcuts while typing.
-       */
-
       if (
         target?.tagName === "INPUT" ||
         target?.tagName === "TEXTAREA" ||
@@ -202,16 +417,12 @@ export function CanvasWorkspace({
         return;
       }
 
-      /*
-       * Don't trigger repeatedly.
-       */
-
       if (event.repeat) {
         return;
       }
 
       /*
-       * Undo / Redo are handled by InfiniteCanvas.
+       * Ctrl/Cmd shortcuts are handled elsewhere.
        */
 
       if (event.ctrlKey || event.metaKey) {
@@ -270,9 +481,9 @@ export function CanvasWorkspace({
   }, [canEdit]);
 
   /*
-   * ==========================================================
+   * ========================================================
    * NO PAGE
-   * ==========================================================
+   * ========================================================
    */
 
   if (!currentPage) {
@@ -299,9 +510,9 @@ export function CanvasWorkspace({
   }
 
   /*
-   * ==========================================================
+   * ========================================================
    * SLIDES
-   * ==========================================================
+   * ========================================================
    */
 
   if (board.type === "SLIDES") {
@@ -311,9 +522,9 @@ export function CanvasWorkspace({
   }
 
   /*
-   * ==========================================================
+   * ========================================================
    * INFINITE CANVAS
-   * ==========================================================
+   * ========================================================
    */
 
   return (
@@ -325,6 +536,7 @@ export function CanvasWorkspace({
         eraserSize={eraserSize}
         onHistoryChange={setHistoryState}
         onHistoryActions={handleHistoryActions}
+        onCanvasChange={handleCanvasChange}
       />
 
       <CanvasToolbar
@@ -339,6 +551,25 @@ export function CanvasWorkspace({
         onRedo={() => redoAction?.()}
         onImageUpload={handleImageUpload}
       />
+
+      {/* ====================================================
+          SAVE STATUS
+          ==================================================== */}
+
+      <div
+        className="
+          absolute
+          bottom-4
+          left-4
+          z-30
+        "
+      >
+        <SaveStatus
+          status={persistence.status}
+          isDirty={persistence.isDirty}
+          onRetry={() => void persistence.saveNow()}
+        />
+      </div>
     </div>
   );
 }

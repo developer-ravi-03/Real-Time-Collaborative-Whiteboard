@@ -40,13 +40,27 @@ app.use(
 
 /* ===========================
    JSON BODY FOR EVERYTHING ELSE
+
+   Canvas data can contain:
+   - Fabric objects
+   - images
+   - Base64/data URLs
+   - other serialized canvas metadata
+
+   The default Express JSON limit is too small
+   for image-containing canvas payloads.
 =========================== */
 
-app.use(express.json());
+app.use(
+  express.json({
+    limit: "10mb",
+  }),
+);
 
 app.use(
   express.urlencoded({
     extended: true,
+    limit: "10mb",
   }),
 );
 

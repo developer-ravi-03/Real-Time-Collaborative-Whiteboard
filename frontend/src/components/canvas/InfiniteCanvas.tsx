@@ -42,6 +42,8 @@ type InfiniteCanvasProps = {
   onHistoryChange?: (state: HistoryState) => void;
 
   onHistoryActions?: (actions: HistoryActions) => void;
+
+  onCanvasChange?: (canvasData: Record<string, unknown>) => void;
 };
 
 /*
@@ -61,22 +63,6 @@ const PEN_WIDTH = 3;
 /*
  * ==========================================================
  * PEN CURSOR
- * ==========================================================
- *
- * IMPORTANT:
- *
- * Fabric's drawing mode uses:
- *
- *     freeDrawingCursor
- *
- * not only defaultCursor / hoverCursor.
- *
- * Therefore this cursor MUST be assigned to:
- *
- *     canvas.freeDrawingCursor
- *
- * otherwise Fabric falls back to "crosshair".
- *
  * ==========================================================
  */
 
@@ -133,6 +119,7 @@ export function InfiniteCanvas({
   eraserSize,
   onHistoryChange,
   onHistoryActions,
+  onCanvasChange,
 }: InfiniteCanvasProps) {
   /*
    * ========================================================
@@ -220,6 +207,27 @@ export function InfiniteCanvas({
 
   /*
    * ========================================================
+   * CANVAS INITIALIZATION
+   * ========================================================
+   *
+   * IMPORTANT:
+   *
+   * Loading canvasData from the database is NOT a user
+   * modification.
+   *
+   * During Fabric's loadFromJSON(), internal Fabric events
+   * may happen. We must prevent those events from causing
+   * onCanvasChange() and therefore prevent false:
+   *
+   *     Unsaved changes
+   *
+   * immediately after reopening a board.
+   */
+
+  const isInitializingRef = useRef(true);
+
+  /*
+   * ========================================================
    * CALLBACK REFS
    * ========================================================
    */
@@ -227,6 +235,8 @@ export function InfiniteCanvas({
   const onHistoryChangeRef = useRef(onHistoryChange);
 
   const onHistoryActionsRef = useRef(onHistoryActions);
+
+  const onCanvasChangeRef = useRef(onCanvasChange);
 
   /*
    * ========================================================
@@ -249,6 +259,10 @@ export function InfiniteCanvas({
   useEffect(() => {
     onHistoryActionsRef.current = onHistoryActions;
   }, [onHistoryActions]);
+
+  useEffect(() => {
+    onCanvasChangeRef.current = onCanvasChange;
+  }, [onCanvasChange]);
 
   /*
    * ========================================================
@@ -320,12 +334,17 @@ export function InfiniteCanvas({
    * ========================================================
    * PUSH HISTORY
    * ========================================================
+   *
+   * IMPORTANT:
+   *
+   * Do not create history / dirty state while the canvas
+   * is being initialized from persisted canvasData.
    */
 
   const pushHistory = () => {
     const canvas = fabricCanvasRef.current;
 
-    if (!canvas || restoringHistoryRef.current) {
+    if (!canvas || restoringHistoryRef.current || isInitializingRef.current) {
       return;
     }
 
@@ -346,6 +365,8 @@ export function InfiniteCanvas({
     redoHistoryRef.current = [];
 
     notifyHistoryChange();
+
+    onCanvasChangeRef.current?.(canvas.toJSON() as Record<string, unknown>);
   };
 
   /*
@@ -423,6 +444,12 @@ export function InfiniteCanvas({
     await restoreSnapshot(previousState);
 
     notifyHistoryChange();
+
+    const canvas = fabricCanvasRef.current;
+
+    if (canvas) {
+      onCanvasChangeRef.current?.(canvas.toJSON() as Record<string, unknown>);
+    }
   };
 
   /*
@@ -443,7 +470,19 @@ export function InfiniteCanvas({
     await restoreSnapshot(nextState);
 
     notifyHistoryChange();
+
+    const canvas = fabricCanvasRef.current;
+
+    if (canvas) {
+      onCanvasChangeRef.current?.(canvas.toJSON() as Record<string, unknown>);
+    }
   };
+
+  /*
+   * ========================================================
+   * ADD IMAGE
+   * ========================================================
+   */
 
   const addImage = async (file: File) => {
     const canvas = fabricCanvasRef.current;
@@ -573,19 +612,19 @@ export function InfiniteCanvas({
 
     /*
      * ======================================================
-     * IMPORTANT PEN CURSOR FIX
+     * MARK CANVAS AS INITIALIZING
      * ======================================================
      *
-     * Fabric has a separate cursor specifically for
-     * free drawing mode.
-     *
-     * Default:
-     *
-     *     crosshair
-     *
-     * That is why the "+" was still appearing.
-     *
-     * We set it immediately after creating the canvas.
+     * Everything that happens while persisted canvasData is
+     * being loaded must NOT be treated as a user edit.
+     */
+
+    isInitializingRef.current = true;
+
+    /*
+     * ======================================================
+     * PEN CURSOR
+     * ======================================================
      */
 
     canvas.freeDrawingCursor = PEN_CURSOR;
@@ -610,6 +649,8 @@ export function InfiniteCanvas({
 
     if (!interactionElement) {
       canvas.dispose();
+
+      isInitializingRef.current = false;
 
       return;
     }
@@ -663,6 +704,12 @@ export function InfiniteCanvas({
           return;
         }
 
+        /*
+         * --------------------------------------------------
+         * EMPTY CANVAS
+         * --------------------------------------------------
+         */
+
         if (!canvasData || Object.keys(canvasData).length === 0) {
           historyRef.current = [JSON.stringify(canvas.toJSON())];
 
@@ -672,6 +719,17 @@ export function InfiniteCanvas({
 
           return;
         }
+
+        /*
+         * --------------------------------------------------
+         * LOAD PERSISTED DATA
+         * --------------------------------------------------
+         *
+         * isInitializingRef remains true here.
+         *
+         * Therefore any Fabric events caused by loading
+         * persisted objects cannot trigger dirty state.
+         */
 
         await canvas.loadFromJSON(canvasData);
 
@@ -702,6 +760,12 @@ export function InfiniteCanvas({
 
         setZoom(canvas.getZoom());
 
+        /*
+         * --------------------------------------------------
+         * INITIAL HISTORY STATE
+         * --------------------------------------------------
+         */
+
         historyRef.current = [JSON.stringify(canvas.toJSON())];
 
         redoHistoryRef.current = [];
@@ -711,6 +775,17 @@ export function InfiniteCanvas({
         if (!cancelled) {
           console.error("Failed to load infinite canvas:", error);
         }
+      } finally {
+        /*
+         * ==================================================
+         * INITIALIZATION COMPLETE
+         * ==================================================
+         *
+         * From this point onward, canvas mutations are
+         * genuine user changes and may create dirty state.
+         */
+
+        isInitializingRef.current = false;
       }
     };
 
@@ -913,18 +988,6 @@ export function InfiniteCanvas({
         canvas.freeDrawingBrush.width = PEN_WIDTH;
 
         canvas.freeDrawingBrush.color = "#111827";
-
-        /*
-         * ==================================================
-         * THE ACTUAL FIX
-         * ==================================================
-         *
-         * Fabric uses freeDrawingCursor while
-         * isDrawingMode === true.
-         *
-         * Without this line Fabric changes the cursor
-         * back to its default "crosshair".
-         */
 
         canvas.freeDrawingCursor = PEN_CURSOR;
 
@@ -1422,6 +1485,7 @@ export function InfiniteCanvas({
         if (current instanceof Line) {
           current.set({
             x2: pointer.x,
+
             y2: pointer.y,
           });
 
@@ -1453,6 +1517,7 @@ export function InfiniteCanvas({
 
       lastPanPointRef.current = {
         x: position.x,
+
         y: position.y,
       };
 
@@ -1584,7 +1649,7 @@ export function InfiniteCanvas({
      */
 
     const handlePathCreated = () => {
-      if (restoringHistoryRef.current) {
+      if (restoringHistoryRef.current || isInitializingRef.current) {
         return;
       }
 
@@ -1612,7 +1677,7 @@ export function InfiniteCanvas({
      */
 
     const handleObjectModified = () => {
-      if (restoringHistoryRef.current) {
+      if (restoringHistoryRef.current || isInitializingRef.current) {
         return;
       }
 
@@ -1881,13 +1946,6 @@ export function InfiniteCanvas({
 
     eraser.setSize(eraserSize);
 
-    /*
-     * IMPORTANT:
-     *
-     * Set Fabric drawing cursor before
-     * updateToolMode() is called.
-     */
-
     canvas.freeDrawingCursor = PEN_CURSOR;
 
     updateToolMode();
@@ -1900,6 +1958,13 @@ export function InfiniteCanvas({
 
     return () => {
       cancelled = true;
+
+      /*
+       * Prevent callbacks from treating cleanup as a
+       * user modification.
+       */
+
+      isInitializingRef.current = true;
 
       resizeObserver.disconnect();
 
@@ -2084,16 +2149,6 @@ export function InfiniteCanvas({
       canvas.freeDrawingBrush.width = PEN_WIDTH;
 
       canvas.freeDrawingBrush.color = "#111827";
-
-      /*
-       * ==================================================
-       * CRITICAL FIX
-       * ==================================================
-       *
-       * Fabric's free drawing mode has its own cursor.
-       *
-       * This was the missing property.
-       */
 
       canvas.freeDrawingCursor = PEN_CURSOR;
 

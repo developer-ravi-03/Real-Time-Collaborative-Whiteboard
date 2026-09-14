@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, MoreHorizontal, Check } from "lucide-react";
+import { ArrowLeft, MoreHorizontal } from "lucide-react";
 
 import type { Board } from "@/types/board";
 
@@ -36,6 +36,7 @@ export function BoardHeader({ board }: BoardHeaderProps) {
             h-9
             w-9
             shrink-0
+            cursor-pointer
             items-center
             justify-center
             rounded-lg
@@ -43,7 +44,6 @@ export function BoardHeader({ board }: BoardHeaderProps) {
             transition
             hover:bg-muted
             hover:text-foreground
-            cursor-pointer
           "
         >
           <ArrowLeft className="h-4 w-4" />
@@ -84,47 +84,6 @@ export function BoardHeader({ board }: BoardHeaderProps) {
 
       {/* Right */}
       <div className="flex shrink-0 items-center gap-2">
-        {/* Save Status */}
-        <div
-          className="
-            hidden
-            items-center
-            gap-2
-            rounded-lg
-            border
-            border-border
-            px-3
-            py-2
-            sm:flex
-          "
-        >
-          <span className="flex h-4 w-4 items-center justify-center">
-            <Check className="h-3.5 w-3.5 text-emerald-500" />
-          </span>
-
-          <span className="text-xs font-medium text-muted-foreground">
-            Saved
-          </span>
-        </div>
-
-        {/* Mobile Save Status */}
-        <div
-          className="
-            flex
-            h-9
-            w-9
-            items-center
-            justify-center
-            rounded-lg
-            border
-            border-border
-            sm:hidden
-          "
-          title="Saved"
-        >
-          <Check className="h-4 w-4 text-emerald-500" />
-        </div>
-
         {/* More Actions */}
         <button
           type="button"
@@ -133,6 +92,7 @@ export function BoardHeader({ board }: BoardHeaderProps) {
             flex
             h-9
             w-9
+            cursor-pointer
             items-center
             justify-center
             rounded-lg
@@ -140,7 +100,6 @@ export function BoardHeader({ board }: BoardHeaderProps) {
             transition
             hover:bg-muted
             hover:text-foreground
-            cursor-pointer
           "
         >
           <MoreHorizontal className="h-4 w-4" />

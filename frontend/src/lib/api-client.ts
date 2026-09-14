@@ -1,16 +1,29 @@
+import type { ApiResponse } from "@/types/api";
+import type { CurrentPage } from "@/types/board";
+
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL ||
   "http://localhost:5000/api/v1";
 
-type GetToken = (
-  options?: { skipCache?: boolean }
+export type GetToken = (
+  options?: {
+    skipCache?: boolean;
+  },
 ) => Promise<string | null>;
 
 const sleep = (ms: number) =>
-  new Promise((resolve) => setTimeout(resolve, ms));
+  new Promise((resolve) =>
+    setTimeout(resolve, ms),
+  );
 
-async function getAuthToken(getToken: GetToken) {
-  for (let attempt = 0; attempt < 5; attempt++) {
+async function getAuthToken(
+  getToken: GetToken,
+) {
+  for (
+    let attempt = 0;
+    attempt < 5;
+    attempt++
+  ) {
     const token = await getToken({
       skipCache: true,
     });
@@ -30,7 +43,8 @@ export async function apiRequest<T>(
   endpoint: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const token = await getAuthToken(getToken);
+  const token =
+    await getAuthToken(getToken);
 
   if (!token) {
     throw new Error(
@@ -38,15 +52,27 @@ export async function apiRequest<T>(
     );
   }
 
-  const headers = new Headers(options.headers);
+  const headers = new Headers(
+    options.headers,
+  );
 
-  headers.set("Content-Type", "application/json");
-  headers.set("Authorization", `Bearer ${token}`);
+  headers.set(
+    "Content-Type",
+    "application/json",
+  );
 
-  const response = await fetch(`${API_URL}${endpoint}`, {
-    ...options,
-    headers,
-  });
+  headers.set(
+    "Authorization",
+    `Bearer ${token}`,
+  );
+
+  const response = await fetch(
+    `${API_URL}${endpoint}`,
+    {
+      ...options,
+      headers,
+    },
+  );
 
   const data = await response.json();
 
@@ -59,4 +85,34 @@ export async function apiRequest<T>(
   }
 
   return data;
+}
+
+/*
+ * ==========================================================
+ * SAVE CANVAS
+ * ==========================================================
+ *
+ * Persists the complete Fabric canvas JSON for one page.
+ */
+
+export async function saveCanvas(
+  getToken: GetToken,
+  pageId: string,
+  canvasData: Record<string, unknown>,
+): Promise<
+  ApiResponse<CurrentPage>
+> {
+  return apiRequest<
+    ApiResponse<CurrentPage>
+  >(
+    getToken,
+    `/pages/${pageId}/canvas`,
+    {
+      method: "PATCH",
+
+      body: JSON.stringify({
+        canvasData,
+      }),
+    },
+  );
 }
