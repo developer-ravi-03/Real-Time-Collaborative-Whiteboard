@@ -9,6 +9,7 @@ import type { TPointerEvent, TPointerEventInfo } from "fabric";
 import type { CanvasTool } from "./canvas.types";
 
 import { CanvasEraser, type EraserSize } from "./CanvasEraser";
+import { addImageToCanvas } from "./CanvasImage";
 
 /*
  * ==========================================================
@@ -23,7 +24,10 @@ type HistoryState = {
 
 type HistoryActions = {
   undo: () => void;
+
   redo: () => void;
+
+  addImage: (file: File) => Promise<void>;
 };
 
 type InfiniteCanvasProps = {
@@ -441,6 +445,24 @@ export function InfiniteCanvas({
     notifyHistoryChange();
   };
 
+  const addImage = async (file: File) => {
+    const canvas = fabricCanvasRef.current;
+
+    if (!canvas || !canEditRef.current) {
+      return;
+    }
+
+    try {
+      await addImageToCanvas(canvas, file);
+
+      pushHistory();
+    } catch (error) {
+      console.error("Failed to add image:", error);
+
+      throw error;
+    }
+  };
+
   /*
    * ========================================================
    * HISTORY ACTION BRIDGE
@@ -455,6 +477,10 @@ export function InfiniteCanvas({
 
       redo: () => {
         void redo();
+      },
+
+      addImage: async (file: File) => {
+        await addImage(file);
       },
     });
 

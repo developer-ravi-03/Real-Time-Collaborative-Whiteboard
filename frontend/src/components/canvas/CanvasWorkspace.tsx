@@ -12,11 +12,7 @@ import { InfiniteCanvas } from "./InfiniteCanvas";
 
 import { CanvasToolbar } from "./CanvasToolbar";
 
-import {
-  DEFAULT_ERASER_SIZE,
-  ERASER_SIZES,
-  type EraserSize,
-} from "./CanvasEraser";
+import { DEFAULT_ERASER_SIZE, type EraserSize } from "./CanvasEraser";
 
 type CanvasWorkspaceProps = {
   board: Board;
@@ -32,36 +28,25 @@ type HistoryState = {
   canRedo: boolean;
 };
 
+type HistoryActions = {
+  undo: () => void;
+
+  redo: () => void;
+
+  addImage: (file: File) => Promise<void>;
+};
+
 export function CanvasWorkspace({
   board,
   currentPage,
   canEdit,
 }: CanvasWorkspaceProps) {
-  /*
-   * ==========================================================
-   * TOOL
-   * ==========================================================
-   */
-
   const [activeTool, setActiveTool] = useState<CanvasTool>("select");
-
-  /*
-   * ==========================================================
-   * ERASER SIZE
-   * ==========================================================
-   */
 
   const [eraserSize, setEraserSize] = useState<EraserSize>(DEFAULT_ERASER_SIZE);
 
-  /*
-   * ==========================================================
-   * HISTORY
-   * ==========================================================
-   */
-
   const [historyState, setHistoryState] = useState<HistoryState>({
     canUndo: false,
-
     canRedo: false,
   });
 
@@ -69,24 +54,118 @@ export function CanvasWorkspace({
 
   const [redoAction, setRedoAction] = useState<(() => void) | null>(null);
 
+  const [addImageAction, setAddImageAction] = useState<
+    ((file: File) => Promise<void>) | null
+  >(null);
+
   /*
    * ==========================================================
-   * HISTORY ACTION BRIDGE
+   * HISTORY / CANVAS ACTION BRIDGE
    * ==========================================================
    */
 
-  const handleHistoryActions = useCallback(
-    (actions: {
-      undo: () => void;
+  const handleHistoryActions = useCallback((actions: HistoryActions) => {
+    setUndoAction(() => actions.undo);
 
-      redo: () => void;
-    }) => {
-      setUndoAction(() => actions.undo);
+    setRedoAction(() => actions.redo);
 
-      setRedoAction(() => actions.redo);
+    setAddImageAction(() => actions.addImage);
+  }, []);
+
+  /*
+   * ==========================================================
+   * IMAGE UPLOAD
+   * ==========================================================
+   */
+
+  const handleImageUpload = useCallback(
+    async (file: File) => {
+      if (!canEdit) {
+        return;
+      }
+
+      if (!addImageAction) {
+        console.warn("Image action is not ready yet.");
+
+        return;
+      }
+
+      try {
+        await addImageAction(file);
+
+        /*
+         * Image insertion is an action, not a persistent
+         * interaction mode.
+         *
+         * Therefore return to Select automatically.
+         */
+        setActiveTool("select");
+      } catch (error) {
+        console.error("Failed to add image:", error);
+
+        const message =
+          error instanceof Error ? error.message : "Failed to add image.";
+
+        window.alert(message);
+      }
     },
-    [],
+    [addImageAction, canEdit],
   );
+
+  /*
+   * ==========================================================
+   * PASTE IMAGE
+   * ==========================================================
+   *
+   * Ctrl/Cmd + V can directly insert an image
+   * copied from:
+   *
+   * - Screenshot
+   * - Browser
+   * - Image editor
+   * - File explorer
+   *
+   * Text paste is completely untouched.
+   * ==========================================================
+   */
+
+  useEffect(() => {
+    if (!canEdit) {
+      return;
+    }
+
+    const handlePaste = (event: ClipboardEvent) => {
+      const items = event.clipboardData?.items;
+
+      if (!items) {
+        return;
+      }
+
+      for (const item of items) {
+        if (!item.type.startsWith("image/")) {
+          continue;
+        }
+
+        const file = item.getAsFile();
+
+        if (!file) {
+          return;
+        }
+
+        event.preventDefault();
+
+        void handleImageUpload(file);
+
+        return;
+      }
+    };
+
+    window.addEventListener("paste", handlePaste);
+
+    return () => {
+      window.removeEventListener("paste", handlePaste);
+    };
+  }, [canEdit, handleImageUpload]);
 
   /*
    * ==========================================================
@@ -100,9 +179,6 @@ export function CanvasWorkspace({
    * C = Circle
    * L = Line
    * T = Text
-   *
-   * [ = Smaller eraser
-   * ] = Larger eraser
    * ==========================================================
    */
 
@@ -135,47 +211,12 @@ export function CanvasWorkspace({
       }
 
       /*
-       * Undo / redo belong to InfiniteCanvas.
+       * Undo / Redo are handled by InfiniteCanvas.
        */
 
       if (event.ctrlKey || event.metaKey) {
         return;
       }
-
-      /*
-       * ======================================================
-       * ERASER SIZE SHORTCUTS
-       * ======================================================
-       */
-
-      if (activeTool === "eraser" && (event.key === "[" || event.key === "]")) {
-        const currentIndex = ERASER_SIZES.indexOf(eraserSize);
-
-        if (currentIndex === -1) {
-          return;
-        }
-
-        const nextIndex =
-          event.key === "["
-            ? Math.max(0, currentIndex - 1)
-            : Math.min(ERASER_SIZES.length - 1, currentIndex + 1);
-
-        const nextSize = ERASER_SIZES[nextIndex];
-
-        if (nextSize !== eraserSize) {
-          setEraserSize(nextSize);
-        }
-
-        event.preventDefault();
-
-        return;
-      }
-
-      /*
-       * ======================================================
-       * TOOL SHORTCUTS
-       * ======================================================
-       */
 
       let nextTool: CanvasTool | null = null;
 
@@ -226,7 +267,7 @@ export function CanvasWorkspace({
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [canEdit, activeTool, eraserSize]);
+  }, [canEdit]);
 
   /*
    * ==========================================================
@@ -296,6 +337,7 @@ export function CanvasWorkspace({
         canRedo={historyState.canRedo}
         onUndo={() => undoAction?.()}
         onRedo={() => redoAction?.()}
+        onImageUpload={handleImageUpload}
       />
     </div>
   );

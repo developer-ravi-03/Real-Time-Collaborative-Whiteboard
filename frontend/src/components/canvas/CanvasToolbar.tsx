@@ -9,9 +9,12 @@ import {
   Circle,
   Minus,
   Type,
+  ImagePlus,
   Undo2,
   Redo2,
 } from "lucide-react";
+
+import { useRef } from "react";
 
 import type { CanvasTool } from "./canvas.types";
 
@@ -25,6 +28,8 @@ type CanvasToolbarProps = {
   eraserSize: EraserSize;
 
   onEraserSizeChange: (size: EraserSize) => void;
+
+  onImageUpload: (file: File) => void | Promise<void>;
 
   canEdit: boolean;
 
@@ -103,12 +108,21 @@ export function CanvasToolbar({
   onToolChange,
   eraserSize,
   onEraserSizeChange,
+  onImageUpload,
   canEdit,
   canUndo,
   canRedo,
   onUndo,
   onRedo,
 }: CanvasToolbarProps) {
+  /*
+   * ==========================================================
+   * FILE INPUT
+   * ==========================================================
+   */
+
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
+
   /*
    * ==========================================================
    * REMOVE BUTTON FOCUS
@@ -171,204 +185,316 @@ export function CanvasToolbar({
     onEraserSizeChange(size);
   };
 
+  /*
+   * ==========================================================
+   * OPEN IMAGE PICKER
+   * ==========================================================
+   */
+
+  const handleImageButtonClick = () => {
+    if (!canEdit) {
+      return;
+    }
+
+    blurToolbarButton();
+
+    imageInputRef.current?.click();
+  };
+
+  /*
+   * ==========================================================
+   * IMAGE SELECTED
+   * ==========================================================
+   */
+
+  const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+
+    /*
+     * Reset input value so the same image can be selected again.
+     */
+
+    event.target.value = "";
+
+    if (!file) {
+      return;
+    }
+
+    void onImageUpload(file);
+  };
+
   return (
-    <div
-      className="
-        absolute
-        left-1/2
-        top-4
-        z-30
-
-        flex
-        -translate-x-1/2
-        items-center
-        gap-1
-
-        rounded-2xl
-        border
-        border-white/10
-
-        bg-zinc-950/95
-
-        px-2
-        py-2
-
-        shadow-2xl
-        backdrop-blur-xl
-
-        whitespace-nowrap
-      "
-    >
+    <>
       {/* ====================================================
-          UNDO
+          HIDDEN IMAGE INPUT
           ==================================================== */}
 
-      <button
-        type="button"
-        disabled={!canEdit || !canUndo}
-        onMouseDown={(event) => {
-          event.preventDefault();
-        }}
-        onClick={handleUndo}
-        title="Undo (Ctrl + Z)"
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        className="hidden"
+        onChange={handleImageChange}
+      />
+
+      <div
         className="
+          absolute
+          left-1/2
+          top-4
+          z-30
+
           flex
-          h-9
-          w-9
+          -translate-x-1/2
           items-center
-          justify-center
+          gap-1
 
-          rounded-xl
+          rounded-2xl
+          border
+          border-white/10
 
-          text-zinc-400
+          bg-zinc-950/95
 
-          outline-none
-          focus:outline-none
-          focus-visible:outline-none
-          focus-visible:ring-0
+          px-2
+          py-2
 
-          transition-all
-          duration-150
+          shadow-2xl
+          backdrop-blur-xl
 
-          hover:bg-white/10
-          hover:text-white
-
-          disabled:cursor-not-allowed
-          disabled:opacity-30
+          whitespace-nowrap
         "
       >
-        <Undo2 className="h-4 w-4" />
-      </button>
+        {/* ==================================================
+            UNDO
+            ================================================== */}
 
-      {/* ====================================================
-          REDO
-          ==================================================== */}
+        <button
+          type="button"
+          disabled={!canEdit || !canUndo}
+          onMouseDown={(event) => {
+            event.preventDefault();
+          }}
+          onClick={handleUndo}
+          title="Undo (Ctrl + Z)"
+          className="
+            flex
+            h-9
+            w-9
+            items-center
+            justify-center
 
-      <button
-        type="button"
-        disabled={!canEdit || !canRedo}
-        onMouseDown={(event) => {
-          event.preventDefault();
-        }}
-        onClick={handleRedo}
-        title="Redo (Ctrl + Y)"
-        className="
-          flex
-          h-9
-          w-9
-          items-center
-          justify-center
+            rounded-xl
 
-          rounded-xl
+            text-zinc-400
 
-          text-zinc-400
+            outline-none
+            focus:outline-none
+            focus-visible:outline-none
+            focus-visible:ring-0
 
-          outline-none
-          focus:outline-none
-          focus-visible:outline-none
-          focus-visible:ring-0
+            transition-all
+            duration-150
 
-          transition-all
-          duration-150
+            hover:bg-white/10
+            hover:text-white
 
-          hover:bg-white/10
-          hover:text-white
+            disabled:cursor-not-allowed
+            disabled:opacity-30
+          "
+        >
+          <Undo2 className="h-4 w-4" />
+        </button>
 
-          disabled:cursor-not-allowed
-          disabled:opacity-30
-        "
-      >
-        <Redo2 className="h-4 w-4" />
-      </button>
+        {/* ==================================================
+            REDO
+            ================================================== */}
 
-      {/* ====================================================
-          DIVIDER
-          ==================================================== */}
+        <button
+          type="button"
+          disabled={!canEdit || !canRedo}
+          onMouseDown={(event) => {
+            event.preventDefault();
+          }}
+          onClick={handleRedo}
+          title="Redo (Ctrl + Y)"
+          className="
+            flex
+            h-9
+            w-9
+            items-center
+            justify-center
 
-      <div className="mx-1 h-6 w-px bg-white/10" />
+            rounded-xl
 
-      {/* ====================================================
-          TOOLS
-          ==================================================== */}
+            text-zinc-400
 
-      {tools.map((tool) => {
-        const isActive = activeTool === tool.id;
+            outline-none
+            focus:outline-none
+            focus-visible:outline-none
+            focus-visible:ring-0
 
-        return (
-          <button
-            key={tool.id}
-            type="button"
-            disabled={!canEdit}
-            onMouseDown={(event) => {
-              event.preventDefault();
-            }}
-            onClick={() => handleToolChange(tool.id)}
-            title={`${tool.label} (${tool.shortcut})`}
-            className={`
-              group
+            transition-all
+            duration-150
 
-              flex
-              h-9
-              items-center
-              gap-1.5
+            hover:bg-white/10
+            hover:text-white
 
-              rounded-xl
-              px-2.5
+            disabled:cursor-not-allowed
+            disabled:opacity-30
+          "
+        >
+          <Redo2 className="h-4 w-4" />
+        </button>
 
-              text-xs
-              font-medium
+        {/* ==================================================
+            DIVIDER
+            ================================================== */}
 
-              outline-none
-              focus:outline-none
-              focus-visible:outline-none
-              focus-visible:ring-0
+        <div className="mx-1 h-6 w-px bg-white/10" />
 
-              transition-all
-              duration-150
+        {/* ==================================================
+            TOOLS
+            ================================================== */}
 
-              ${
-                isActive
-                  ? "bg-white text-zinc-900 shadow-md"
-                  : "text-zinc-400 hover:bg-white/10 hover:text-white"
-              }
+        {tools.map((tool) => {
+          const isActive = activeTool === tool.id;
 
-              ${!canEdit ? "cursor-not-allowed opacity-50" : "cursor-pointer"}
-            `}
-          >
-            {tool.icon}
-
-            <span className="hidden md:inline">{tool.label}</span>
-
-            <span
+          return (
+            <button
+              key={tool.id}
+              type="button"
+              disabled={!canEdit}
+              onMouseDown={(event) => {
+                event.preventDefault();
+              }}
+              onClick={() => handleToolChange(tool.id)}
+              title={`${tool.label} (${tool.shortcut})`}
               className={`
-                rounded-md
+                group
 
-                px-1
-                py-0.5
+                flex
+                h-9
+                items-center
+                gap-1.5
 
-                text-[9px]
-                font-semibold
+                rounded-xl
+                px-2.5
+
+                text-xs
+                font-medium
+
+                outline-none
+                focus:outline-none
+                focus-visible:outline-none
+                focus-visible:ring-0
+
+                transition-all
+                duration-150
 
                 ${
                   isActive
-                    ? "bg-zinc-200 text-zinc-700"
-                    : "bg-white/10 text-zinc-500"
+                    ? "bg-white text-zinc-900 shadow-md"
+                    : "text-zinc-400 hover:bg-white/10 hover:text-white"
                 }
+
+                ${!canEdit ? "cursor-not-allowed opacity-50" : "cursor-pointer"}
               `}
             >
-              {tool.shortcut}
-            </span>
-          </button>
-        );
-      })}
+              {tool.icon}
 
-      {/* ====================================================
-          ERASER SIZE
-          ==================================================== */}
+              <span className="hidden md:inline">{tool.label}</span>
 
-      {activeTool === "eraser" && canEdit && (
-        <div
-          className="
+              <span
+                className={`
+                  rounded-md
+
+                  px-1
+                  py-0.5
+
+                  text-[9px]
+                  font-semibold
+
+                  ${
+                    isActive
+                      ? "bg-zinc-200 text-zinc-700"
+                      : "bg-white/10 text-zinc-500"
+                  }
+                `}
+              >
+                {tool.shortcut}
+              </span>
+            </button>
+          );
+        })}
+
+        {/* ==================================================
+            IMAGE
+            ================================================== */}
+
+        <button
+          type="button"
+          disabled={!canEdit}
+          onMouseDown={(event) => {
+            event.preventDefault();
+          }}
+          onClick={handleImageButtonClick}
+          title="Insert Image"
+          className={`
+            group
+
+            flex
+            h-9
+            items-center
+            gap-1.5
+
+            rounded-xl
+            px-2.5
+
+            text-xs
+            font-medium
+
+            outline-none
+            focus:outline-none
+            focus-visible:outline-none
+            focus-visible:ring-0
+
+            transition-all
+            duration-150
+
+            text-zinc-400
+            hover:bg-white/10
+            hover:text-white
+
+            ${!canEdit ? "cursor-not-allowed opacity-50" : "cursor-pointer"}
+          `}
+        >
+          <ImagePlus className="h-4 w-4" />
+
+          <span className="hidden md:inline">Image</span>
+
+          <span
+            className="
+              rounded-md
+              bg-white/10
+              px-1
+              py-0.5
+
+              text-[9px]
+              font-semibold
+              text-zinc-500
+            "
+          >
+            I
+          </span>
+        </button>
+
+        {/* ==================================================
+            ERASER SIZE
+            ================================================== */}
+
+        {activeTool === "eraser" && canEdit && (
+          <div
+            className="
               ml-1
               flex
               items-center
@@ -376,20 +502,20 @@ export function CanvasToolbar({
               border-white/10
               pl-2
             "
-        >
-          <label className="sr-only" htmlFor="eraser-size">
-            Eraser size
-          </label>
+          >
+            <label className="sr-only" htmlFor="eraser-size">
+              Eraser size
+            </label>
 
-          <select
-            id="eraser-size"
-            value={eraserSize}
-            onChange={(event) => handleEraserSizeChange(event.target.value)}
-            onMouseDown={(event) => {
-              event.stopPropagation();
-            }}
-            onBlur={blurToolbarButton}
-            className="
+            <select
+              id="eraser-size"
+              value={eraserSize}
+              onChange={(event) => handleEraserSizeChange(event.target.value)}
+              onMouseDown={(event) => {
+                event.stopPropagation();
+              }}
+              onBlur={blurToolbarButton}
+              className="
                 h-9
                 rounded-xl
 
@@ -410,17 +536,18 @@ export function CanvasToolbar({
 
                 hover:bg-white/15
               "
-            aria-label="Eraser size"
-            title="Eraser size"
-          >
-            {ERASER_SIZES.map((size) => (
-              <option key={size} value={size} className="bg-zinc-950">
-                {size}px
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-    </div>
+              aria-label="Eraser size"
+              title="Eraser size"
+            >
+              {ERASER_SIZES.map((size) => (
+                <option key={size} value={size} className="bg-zinc-950">
+                  {size}px
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
+    </>
   );
 }
