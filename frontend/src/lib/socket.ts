@@ -6,4 +6,8 @@ const SOCKET_URL =
 export const socket = io(SOCKET_URL, {
   transports: ["websocket"],
   autoConnect: false,
+  reconnection: true,
+  reconnectionAttempts: Infinity,
+  reconnectionDelay: 1000,
+  reconnectionDelayMax: 5000,
 });

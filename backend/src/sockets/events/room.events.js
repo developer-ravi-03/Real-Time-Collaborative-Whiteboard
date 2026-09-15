@@ -6,11 +6,37 @@ import { emitCanvasInitialization } from "../utils/canvas.utils.js";
 import { SOCKET_EVENTS } from "../constants/socket.events.js";
 
 export default function registerRoomEvents(io, socket) {
-  socket.on(SOCKET_EVENTS.ROOM_JOIN, async ({ roomId }, callback) => {
+  socket.on(SOCKET_EVENTS.ROOM_JOIN, async (payload, callback) => {
     try {
-      /* -------------------------------------------------------------------------- */
-      /*                            Check Room Exists                               */
-      /* -------------------------------------------------------------------------- */
+      if (typeof callback !== "function") {
+        return;
+      }
+
+      const roomId =
+        typeof payload?.roomId === "string" ? payload.roomId.trim() : "";
+
+      if (!roomId) {
+        return callback({
+          success: false,
+          message: "Room ID is required.",
+        });
+      }
+
+      /* ---------------------------------------------------------------------- */
+      /*                          Already Joined                                 */
+      /* ---------------------------------------------------------------------- */
+
+      if (socket.currentRoomId === roomId) {
+        return callback({
+          success: true,
+          message: "Already joined this room.",
+          users: getUsers(roomId),
+        });
+      }
+
+      /* ---------------------------------------------------------------------- */
+      /*                            Check Room                                   */
+      /* ---------------------------------------------------------------------- */
 
       const room = await RoomService.getRoom(roomId);
 
@@ -21,9 +47,9 @@ export default function registerRoomEvents(io, socket) {
         });
       }
 
-      /* -------------------------------------------------------------------------- */
-      /*                          Check Membership                                  */
-      /* -------------------------------------------------------------------------- */
+      /* ---------------------------------------------------------------------- */
+      /*                           Check Membership                              */
+      /* ---------------------------------------------------------------------- */
 
       const membership = await RoomService.getMembership(
         roomId,
@@ -37,51 +63,109 @@ export default function registerRoomEvents(io, socket) {
         });
       }
 
-      /* -------------------------------------------------------------------------- */
-      /*                              Join Socket Room                              */
-      /* -------------------------------------------------------------------------- */
+      /* ---------------------------------------------------------------------- */
+      /*                    Leave Previous Room First                            */
+      /* ---------------------------------------------------------------------- */
+
+      if (socket.currentRoomId) {
+        const previousRoomId = socket.currentRoomId;
+
+        await socket.leave(previousRoomId);
+
+        removeUser(previousRoomId, socket.id);
+
+        io.to(previousRoomId).emit(
+          SOCKET_EVENTS.PRESENCE_UPDATE,
+          getUsers(previousRoomId),
+        );
+
+        socket.currentRoomId = null;
+      }
+
+      /* ---------------------------------------------------------------------- */
+      /*                            Join Room                                    */
+      /* ---------------------------------------------------------------------- */
 
       await socket.join(roomId);
 
       socket.currentRoomId = roomId;
 
-      /* ------------------------ Presence ------------------------ */
+      /* ---------------------------------------------------------------------- */
+      /*                             Presence                                    */
+      /* ---------------------------------------------------------------------- */
 
       addUser(roomId, socket);
 
       const users = getUsers(roomId);
 
-      /* -------------------------------------------------------------------------- */
-      /*                           Canvas Initialization                            */
-      /* -------------------------------------------------------------------------- */
+      /* ---------------------------------------------------------------------- */
+      /*                         Initial Board/Page                              */
+      /* ---------------------------------------------------------------------- */
 
       const board = await BoardService.getFirstBoard(roomId);
 
+      if (!board) {
+        await socket.leave(roomId);
+        removeUser(roomId, socket.id);
+        socket.currentRoomId = null;
+
+        return callback({
+          success: false,
+          message: "Room does not have a board.",
+        });
+      }
+
       const page = await PageService.getFirstPage(board.id);
+
+      if (!page) {
+        await socket.leave(roomId);
+        removeUser(roomId, socket.id);
+        socket.currentRoomId = null;
+
+        return callback({
+          success: false,
+          message: "Board does not have a page.",
+        });
+      }
+
+      /* ---------------------------------------------------------------------- */
+      /*                        Initial Canvas                                    */
+      /* ---------------------------------------------------------------------- */
 
       emitCanvasInitialization(socket, board, page);
 
-      /* ---------------------- Broadcast ------------------------- */
+      /* ---------------------------------------------------------------------- */
+      /*                       Presence Broadcast                                */
+      /* ---------------------------------------------------------------------- */
 
       io.to(roomId).emit(SOCKET_EVENTS.PRESENCE_UPDATE, users);
 
-      /* ------------------------ Callback ------------------------- */
+      /* ---------------------------------------------------------------------- */
+      /*                              Success                                    */
+      /* ---------------------------------------------------------------------- */
 
-      callback({
+      return callback({
         success: true,
         message: "Joined room successfully.",
         users,
       });
     } catch (error) {
-      callback({
+      console.error(`[Socket] Failed to join room:`, error);
+
+      return callback({
         success: false,
-        message: error.message,
+        message:
+          error instanceof Error ? error.message : "Failed to join room.",
       });
     }
   });
 
   socket.on(SOCKET_EVENTS.ROOM_LEAVE, async (_data, callback) => {
     try {
+      if (typeof callback !== "function") {
+        return;
+      }
+
       if (!socket.currentRoomId) {
         return callback({
           success: false,
@@ -95,29 +179,36 @@ export default function registerRoomEvents(io, socket) {
 
       removeUser(roomId, socket.id);
 
+      socket.currentRoomId = null;
+
       const users = getUsers(roomId);
 
       io.to(roomId).emit(SOCKET_EVENTS.PRESENCE_UPDATE, users);
 
-      socket.currentRoomId = null;
-
-      callback({
+      return callback({
         success: true,
         message: "Left room successfully.",
       });
     } catch (error) {
-      callback({
+      console.error(`[Socket] Failed to leave room:`, error);
+
+      return callback({
         success: false,
-        message: error.message,
+        message:
+          error instanceof Error ? error.message : "Failed to leave room.",
       });
     }
   });
 
   socket.on(SOCKET_EVENTS.PRESENCE_GET, (callback) => {
+    if (typeof callback !== "function") {
+      return;
+    }
+
     if (!socket.currentRoomId) {
       return callback([]);
     }
 
-    callback(getUsers(socket.currentRoomId));
+    return callback(getUsers(socket.currentRoomId));
   });
 }

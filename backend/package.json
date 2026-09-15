@@ -24,6 +24,7 @@
   "author": "Ravi Kumar",
   "license": "MIT",
   "dependencies": {
+    "@clerk/backend": "^3.18.0",
     "@clerk/express": "^2.1.48",
     "@prisma/adapter-pg": "^7.9.1",
     "@prisma/client": "^7.9.1",

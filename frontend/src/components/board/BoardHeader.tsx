@@ -1,15 +1,35 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, MoreHorizontal } from "lucide-react";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  CircleAlert,
+  Loader2,
+  MoreHorizontal,
+  WifiOff,
+} from "lucide-react";
 
 import type { Board } from "@/types/board";
 
+type BoardRealtimeStatus =
+  | "connecting"
+  | "connected"
+  | "joined"
+  | "error"
+  | "disconnected";
+
 type BoardHeaderProps = {
   board: Board;
+  realtimeStatus?: BoardRealtimeStatus;
 };
 
-export function BoardHeader({ board }: BoardHeaderProps) {
+export function BoardHeader({
+  board,
+  realtimeStatus = "disconnected",
+}: BoardHeaderProps) {
+  const realtime = getRealtimeStatus(realtimeStatus);
+
   return (
     <header
       className="
@@ -84,6 +104,29 @@ export function BoardHeader({ board }: BoardHeaderProps) {
 
       {/* Right */}
       <div className="flex shrink-0 items-center gap-2">
+        {/* Realtime Status */}
+        <div
+          title={realtime.description}
+          className="
+            hidden
+            items-center
+            gap-1.5
+            rounded-full
+            border
+            border-border
+            bg-muted/40
+            px-2.5
+            py-1.5
+            text-xs
+            font-medium
+            sm:flex
+          "
+        >
+          {realtime.icon}
+
+          <span className="text-muted-foreground">{realtime.label}</span>
+        </div>
+
         {/* More Actions */}
         <button
           type="button"
@@ -107,4 +150,69 @@ export function BoardHeader({ board }: BoardHeaderProps) {
       </div>
     </header>
   );
+}
+
+function getRealtimeStatus(status: BoardRealtimeStatus) {
+  switch (status) {
+    case "joined":
+      return {
+        label: "Live",
+        description: "Connected to the collaboration room.",
+        icon: (
+          <CheckCircle2
+            className="h-3.5 w-3.5 text-emerald-500"
+            aria-hidden="true"
+          />
+        ),
+      };
+
+    case "connected":
+      return {
+        label: "Connecting",
+        description: "Connected to server. Joining room...",
+        icon: (
+          <Loader2
+            className="h-3.5 w-3.5 animate-spin text-muted-foreground"
+            aria-hidden="true"
+          />
+        ),
+      };
+
+    case "connecting":
+      return {
+        label: "Connecting",
+        description: "Connecting to collaboration server...",
+        icon: (
+          <Loader2
+            className="h-3.5 w-3.5 animate-spin text-muted-foreground"
+            aria-hidden="true"
+          />
+        ),
+      };
+
+    case "error":
+      return {
+        label: "Offline",
+        description: "Realtime collaboration is currently unavailable.",
+        icon: (
+          <CircleAlert
+            className="h-3.5 w-3.5 text-destructive"
+            aria-hidden="true"
+          />
+        ),
+      };
+
+    case "disconnected":
+    default:
+      return {
+        label: "Offline",
+        description: "Not connected to realtime collaboration.",
+        icon: (
+          <WifiOff
+            className="h-3.5 w-3.5 text-muted-foreground"
+            aria-hidden="true"
+          />
+        ),
+      };
+  }
 }

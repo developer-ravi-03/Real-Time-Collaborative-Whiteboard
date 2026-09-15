@@ -22,12 +22,15 @@ import type { RoomRole } from "@/types/room";
 import { CreatePageModal } from "@/components/board/CreatePageModal";
 import { CanvasWorkspace } from "@/components/canvas/CanvasWorkspace";
 
+import { useBoardRealtime } from "@/hooks/useBoardRealtime";
+
 type BoardClientProps = {
   boardId: string;
 };
 
 export default function BoardClient({ boardId }: BoardClientProps) {
   const { getToken, isLoaded, isSignedIn } = useAuth();
+
   const router = useRouter();
 
   const [board, setBoard] = useState<Board | null>(null);
@@ -51,6 +54,12 @@ export default function BoardClient({ boardId }: BoardClientProps) {
   const [pageError, setPageError] = useState<string | null>(null);
 
   const [yourRole, setYourRole] = useState<RoomRole | null>(null);
+
+  const {
+    status: realtimeStatus,
+    roomError: realtimeError,
+    roomUsers,
+  } = useBoardRealtime(board?.roomId ?? null);
 
   const [deletePageId, setDeletePageId] = useState<string | null>(null);
 
@@ -375,7 +384,9 @@ export default function BoardClient({ boardId }: BoardClientProps) {
 
   return (
     <main className="flex h-screen flex-col overflow-hidden bg-background">
-      <BoardHeader board={board} />
+      <BoardHeader board={board} realtimeStatus={realtimeStatus} />
+
+      {realtimeError && <div className="sr-only">{realtimeError}</div>}
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <BoardSidebar
