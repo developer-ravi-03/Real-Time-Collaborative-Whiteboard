@@ -8,9 +8,9 @@ import type { Board, CurrentPage } from "@/types/board";
 
 import type { CanvasTool } from "./canvas.types";
 
-import { SlideCanvas } from "./SlideCanvas";
-
 import { InfiniteCanvas } from "./InfiniteCanvas";
+
+import { SlideCanvas } from "./SlideCanvas";
 
 import { CanvasToolbar } from "./CanvasToolbar";
 
@@ -41,7 +41,15 @@ type HistoryState = {
   canRedo: boolean;
 };
 
-type HistoryActions = {
+type InfiniteHistoryActions = {
+  undo: () => void;
+
+  redo: () => void;
+
+  addImage: (file: File) => Promise<void>;
+};
+
+type SlideHistoryActions = {
   undo: () => void;
 
   redo: () => void;
@@ -66,26 +74,23 @@ function SaveStatus({
 
   onRetry: () => void;
 }) {
-  /*
-   * Saved
-   */
-
   if (status === "saved") {
     return (
       <div
         className="
-          pointer-events-none
           rounded-lg
           border
           border-border
+
           bg-background/95
+
           px-3
           py-2
+
           text-xs
           font-medium
-          text-foreground
+
           shadow-lg
-          backdrop-blur
         "
       >
         <span className="mr-1.5 text-emerald-500">✓</span>
@@ -94,36 +99,31 @@ function SaveStatus({
     );
   }
 
-  /*
-   * Saving
-   */
-
   if (status === "saving") {
     return (
       <div
         className="
-          pointer-events-none
           rounded-lg
           border
           border-border
+
           bg-background/95
+
           px-3
           py-2
+
           text-xs
           font-medium
+
           text-muted-foreground
+
           shadow-lg
-          backdrop-blur
         "
       >
         Saving...
       </div>
     );
   }
-
-  /*
-   * Error
-   */
 
   if (status === "error") {
     return (
@@ -132,17 +132,22 @@ function SaveStatus({
           flex
           items-center
           gap-2
+
           rounded-lg
           border
           border-destructive/30
+
           bg-background/95
+
           px-3
           py-2
+
           text-xs
           font-medium
+
           text-destructive
+
           shadow-lg
-          backdrop-blur
         "
       >
         <span>⚠ Save failed</span>
@@ -151,12 +156,13 @@ function SaveStatus({
           type="button"
           onClick={onRetry}
           className="
-            pointer-events-auto
             rounded
             px-1.5
             py-0.5
+
             underline
             underline-offset-2
+
             hover:bg-muted
           "
         >
@@ -166,41 +172,31 @@ function SaveStatus({
     );
   }
 
-  /*
-   * Unsaved
-   */
-
   if (status === "unsaved" || isDirty) {
     return (
       <div
         className="
-          pointer-events-none
           rounded-lg
           border
           border-border
+
           bg-background/95
+
           px-3
           py-2
+
           text-xs
           font-medium
+
           text-muted-foreground
+
           shadow-lg
-          backdrop-blur
         "
       >
         Unsaved changes
       </div>
     );
   }
-
-  /*
-   * Idle
-   *
-   * We intentionally render nothing here.
-   *
-   * This prevents a newly opened page from incorrectly
-   * showing "Unsaved changes".
-   */
 
   return null;
 }
@@ -226,7 +222,7 @@ export function CanvasWorkspace({
 
   /*
    * ========================================================
-   * TOOL STATE
+   * TOOL
    * ========================================================
    */
 
@@ -242,20 +238,49 @@ export function CanvasWorkspace({
 
   const [historyState, setHistoryState] = useState<HistoryState>({
     canUndo: false,
+
     canRedo: false,
   });
 
-  const [undoAction, setUndoAction] = useState<(() => void) | null>(null);
+  /*
+   * ========================================================
+   * INFINITE ACTIONS
+   * ========================================================
+   */
 
-  const [redoAction, setRedoAction] = useState<(() => void) | null>(null);
+  const [infiniteUndoAction, setInfiniteUndoAction] = useState<
+    (() => void) | null
+  >(null);
 
-  const [addImageAction, setAddImageAction] = useState<
+  const [infiniteRedoAction, setInfiniteRedoAction] = useState<
+    (() => void) | null
+  >(null);
+
+  const [infiniteAddImageAction, setInfiniteAddImageAction] = useState<
     ((file: File) => Promise<void>) | null
   >(null);
 
   /*
    * ========================================================
-   * CANVAS PERSISTENCE
+   * SLIDE ACTIONS
+   * ========================================================
+   */
+
+  const [slideUndoAction, setSlideUndoAction] = useState<(() => void) | null>(
+    null,
+  );
+
+  const [slideRedoAction, setSlideRedoAction] = useState<(() => void) | null>(
+    null,
+  );
+
+  const [slideAddImageAction, setSlideAddImageAction] = useState<
+    ((file: File) => Promise<void>) | null
+  >(null);
+
+  /*
+   * ========================================================
+   * PERSISTENCE
    * ========================================================
    */
 
@@ -269,17 +294,37 @@ export function CanvasWorkspace({
 
   /*
    * ========================================================
-   * HISTORY / CANVAS ACTION BRIDGE
+   * INFINITE HISTORY BRIDGE
    * ========================================================
    */
 
-  const handleHistoryActions = useCallback((actions: HistoryActions) => {
-    setUndoAction(() => actions.undo);
+  const handleInfiniteHistoryActions = useCallback(
+    (actions: InfiniteHistoryActions) => {
+      setInfiniteUndoAction(() => actions.undo);
 
-    setRedoAction(() => actions.redo);
+      setInfiniteRedoAction(() => actions.redo);
 
-    setAddImageAction(() => actions.addImage);
-  }, []);
+      setInfiniteAddImageAction(() => actions.addImage);
+    },
+    [],
+  );
+
+  /*
+   * ========================================================
+   * SLIDE HISTORY BRIDGE
+   * ========================================================
+   */
+
+  const handleSlideHistoryActions = useCallback(
+    (actions: SlideHistoryActions) => {
+      setSlideUndoAction(() => actions.undo);
+
+      setSlideRedoAction(() => actions.redo);
+
+      setSlideAddImageAction(() => actions.addImage);
+    },
+    [],
+  );
 
   /*
    * ========================================================
@@ -288,16 +333,12 @@ export function CanvasWorkspace({
    */
 
   const handleCanvasChange = useCallback(
-    (canvasData: Record<string, unknown>) => {
-      if (!canEdit) {
+    (data: Record<string, unknown>) => {
+      if (!canEdit || !isLoaded || !isSignedIn) {
         return;
       }
 
-      if (!isLoaded || !isSignedIn) {
-        return;
-      }
-
-      persistence.markDirty(canvasData);
+      persistence.markDirty(data);
     },
     [canEdit, isLoaded, isSignedIn, persistence.markDirty],
   );
@@ -314,18 +355,21 @@ export function CanvasWorkspace({
         return;
       }
 
-      if (!addImageAction) {
+      const action =
+        board.type === "SLIDES" ? slideAddImageAction : infiniteAddImageAction;
+
+      if (!action) {
         console.warn("Image action is not ready yet.");
 
         return;
       }
 
       try {
-        await addImageAction(file);
+        await action(file);
 
         /*
-         * Image insertion is an action, not
-         * a persistent interaction mode.
+         * Image is an insertion action,
+         * not a persistent tool mode.
          */
 
         setActiveTool("select");
@@ -338,7 +382,7 @@ export function CanvasWorkspace({
         window.alert(message);
       }
     },
-    [addImageAction, canEdit],
+    [board.type, canEdit, infiniteAddImageAction, slideAddImageAction],
   );
 
   /*
@@ -390,6 +434,8 @@ export function CanvasWorkspace({
    * KEYBOARD TOOL SHORTCUTS
    * ========================================================
    *
+   * Infinite:
+   *
    * V = Select
    * H = Hand
    * P = Pen
@@ -398,7 +444,16 @@ export function CanvasWorkspace({
    * C = Circle
    * L = Line
    * T = Text
-   * ========================================================
+   *
+   * Slide:
+   *
+   * V = Select
+   * P = Pen
+   * E = Eraser
+   * R = Rectangle
+   * C = Circle
+   * L = Line
+   * T = Text
    */
 
   useEffect(() => {
@@ -409,6 +464,11 @@ export function CanvasWorkspace({
     const handleKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
 
+      /*
+       * Never change tool while
+       * typing.
+       */
+
       if (
         target?.tagName === "INPUT" ||
         target?.tagName === "TEXTAREA" ||
@@ -417,15 +477,16 @@ export function CanvasWorkspace({
         return;
       }
 
-      if (event.repeat) {
-        return;
-      }
-
       /*
-       * Ctrl/Cmd shortcuts are handled elsewhere.
+       * Do not handle
+       * Ctrl/Cmd shortcuts.
        */
 
       if (event.ctrlKey || event.metaKey) {
+        return;
+      }
+
+      if (event.repeat) {
         return;
       }
 
@@ -434,38 +495,62 @@ export function CanvasWorkspace({
       switch (event.key.toLowerCase()) {
         case "v":
           nextTool = "select";
+
           break;
 
         case "h":
-          nextTool = "hand";
+          /*
+           * Hand belongs only
+           * to Infinite Canvas.
+           */
+
+          if (board.type === "INFINITE") {
+            nextTool = "hand";
+          }
+
           break;
 
         case "p":
           nextTool = "pen";
+
           break;
 
         case "e":
+          /*
+           * Eraser is available
+           * on BOTH canvases.
+           */
+
           nextTool = "eraser";
+
           break;
 
         case "r":
           nextTool = "rectangle";
+
           break;
 
         case "c":
           nextTool = "circle";
+
           break;
 
         case "l":
           nextTool = "line";
+
           break;
 
         case "t":
           nextTool = "text";
+
           break;
 
         default:
           return;
+      }
+
+      if (!nextTool) {
+        return;
       }
 
       event.preventDefault();
@@ -478,7 +563,7 @@ export function CanvasWorkspace({
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [canEdit]);
+  }, [board.type, canEdit]);
 
   /*
    * ========================================================
@@ -493,8 +578,12 @@ export function CanvasWorkspace({
           flex
           h-full
           w-full
+
           items-center
           justify-center
+
+          overflow-hidden
+
           bg-muted/20
         "
       >
@@ -511,33 +600,72 @@ export function CanvasWorkspace({
 
   /*
    * ========================================================
-   * SLIDES
+   * ACTIVE HISTORY ACTION
    * ========================================================
    */
 
-  if (board.type === "SLIDES") {
-    return (
-      <SlideCanvas canvasData={currentPage.canvasData} canEdit={canEdit} />
-    );
-  }
+  const activeUndoAction =
+    board.type === "INFINITE" ? infiniteUndoAction : slideUndoAction;
+
+  const activeRedoAction =
+    board.type === "INFINITE" ? infiniteRedoAction : slideRedoAction;
 
   /*
    * ========================================================
-   * INFINITE CANVAS
+   * RENDER
    * ========================================================
    */
 
   return (
-    <div className="relative h-full w-full">
-      <InfiniteCanvas
-        canvasData={currentPage.canvasData}
-        canEdit={canEdit}
-        activeTool={activeTool}
-        eraserSize={eraserSize}
-        onHistoryChange={setHistoryState}
-        onHistoryActions={handleHistoryActions}
-        onCanvasChange={handleCanvasChange}
-      />
+    <div
+      className="
+        relative
+
+        h-full
+        w-full
+
+        min-h-0
+        min-w-0
+
+        overflow-hidden
+
+        overscroll-none
+      "
+    >
+      {/* ==================================================
+          INFINITE CANVAS
+          ================================================== */}
+
+      {board.type === "INFINITE" && (
+        <InfiniteCanvas
+          canvasData={currentPage.canvasData}
+          canEdit={canEdit}
+          activeTool={activeTool}
+          eraserSize={eraserSize}
+          onHistoryChange={setHistoryState}
+          onHistoryActions={handleInfiniteHistoryActions}
+          onCanvasChange={handleCanvasChange}
+        />
+      )}
+
+      {/* ==================================================
+          SLIDE CANVAS
+          ================================================== */}
+
+      {board.type === "SLIDES" && (
+        <SlideCanvas
+          canvasData={currentPage.canvasData}
+          canEdit={canEdit}
+          activeTool={activeTool}
+          onHistoryChange={setHistoryState}
+          onHistoryActions={handleSlideHistoryActions}
+          onCanvasChange={handleCanvasChange}
+        />
+      )}
+
+      {/* ==================================================
+          TOOLBAR
+          ================================================== */}
 
       <CanvasToolbar
         activeTool={activeTool}
@@ -545,16 +673,52 @@ export function CanvasWorkspace({
         eraserSize={eraserSize}
         onEraserSizeChange={setEraserSize}
         canEdit={canEdit}
-        canUndo={historyState.canUndo}
-        canRedo={historyState.canRedo}
-        onUndo={() => undoAction?.()}
-        onRedo={() => redoAction?.()}
+        canUndo={Boolean(activeUndoAction) && historyState.canUndo}
+        canRedo={Boolean(activeRedoAction) && historyState.canRedo}
+        onUndo={() => {
+          if (!activeUndoAction) {
+            return;
+          }
+
+          void activeUndoAction();
+        }}
+        onRedo={() => {
+          if (!activeRedoAction) {
+            return;
+          }
+
+          void activeRedoAction();
+        }}
         onImageUpload={handleImageUpload}
+        /*
+         * Hand only exists on
+         * Infinite Canvas.
+         */
+
+        showHand={board.type === "INFINITE"}
+        /*
+         * Eraser exists on
+         * both canvases.
+         */
+
+        showEraser={true}
+        /*
+         * Slide eraser is
+         * object-based, therefore
+         * no size selector.
+         */
+
+        showEraserSize={board.type === "INFINITE"}
+        /*
+         * Image exists on both.
+         */
+
+        showImage={true}
       />
 
-      {/* ====================================================
+      {/* ==================================================
           SAVE STATUS
-          ==================================================== */}
+          ================================================== */}
 
       <div
         className="

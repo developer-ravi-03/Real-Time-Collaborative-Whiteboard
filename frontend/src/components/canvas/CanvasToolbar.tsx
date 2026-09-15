@@ -14,11 +14,17 @@ import {
   Redo2,
 } from "lucide-react";
 
-import { useRef } from "react";
+import { useRef, type ReactNode } from "react";
 
 import type { CanvasTool } from "./canvas.types";
 
 import { ERASER_SIZES, type EraserSize } from "./CanvasEraser";
+
+/*
+ * ==========================================================
+ * TYPES
+ * ==========================================================
+ */
 
 type CanvasToolbarProps = {
   activeTool: CanvasTool;
@@ -29,107 +35,222 @@ type CanvasToolbarProps = {
 
   onEraserSizeChange: (size: EraserSize) => void;
 
-  onImageUpload: (file: File) => void | Promise<void>;
-
   canEdit: boolean;
 
   canUndo: boolean;
 
   canRedo: boolean;
 
-  onUndo: () => void;
+  onUndo: () => void | Promise<void>;
 
-  onRedo: () => void;
+  onRedo: () => void | Promise<void>;
+
+  onImageUpload?: (file: File) => void | Promise<void>;
+
+  /*
+   * Hand:
+   *
+   * Infinite -> true
+   * Slide   -> false
+   */
+  showHand?: boolean;
+
+  /*
+   * Eraser:
+   *
+   * Infinite -> true
+   * Slide   -> true
+   */
+  showEraser?: boolean;
+
+  /*
+   * Eraser size:
+   *
+   * Infinite -> true
+   * Slide   -> false
+   */
+  showEraserSize?: boolean;
+
+  /*
+   * Image:
+   *
+   * Infinite -> true
+   * Slide   -> true
+   */
+  showImage?: boolean;
 };
+
+/*
+ * ==========================================================
+ * TOOL CONFIG
+ * ==========================================================
+ */
 
 type ToolConfig = {
   id: CanvasTool;
 
   label: string;
 
-  icon: React.ReactNode;
+  icon: ReactNode;
 
   shortcut: string;
 };
 
-const tools: ToolConfig[] = [
+const BASE_TOOLS: ToolConfig[] = [
   {
     id: "select",
+
     label: "Select",
+
     icon: <MousePointer2 className="h-4 w-4" />,
+
     shortcut: "V",
   },
+
   {
     id: "hand",
+
     label: "Hand",
+
     icon: <Hand className="h-4 w-4" />,
+
     shortcut: "H",
   },
+
   {
     id: "pen",
+
     label: "Pen",
+
     icon: <Pencil className="h-4 w-4" />,
+
     shortcut: "P",
   },
-  {
-    id: "eraser",
-    label: "Eraser",
-    icon: <Eraser className="h-4 w-4" />,
-    shortcut: "E",
-  },
+
   {
     id: "rectangle",
+
     label: "Rectangle",
+
     icon: <Square className="h-4 w-4" />,
+
     shortcut: "R",
   },
+
   {
     id: "circle",
+
     label: "Circle",
+
     icon: <Circle className="h-4 w-4" />,
+
     shortcut: "C",
   },
+
   {
     id: "line",
+
     label: "Line",
+
     icon: <Minus className="h-4 w-4" />,
+
     shortcut: "L",
   },
+
   {
     id: "text",
+
     label: "Text",
+
     icon: <Type className="h-4 w-4" />,
+
     shortcut: "T",
   },
 ];
 
+const ERASER_TOOL: ToolConfig = {
+  id: "eraser",
+
+  label: "Eraser",
+
+  icon: <Eraser className="h-4 w-4" />,
+
+  shortcut: "E",
+};
+
+/*
+ * ==========================================================
+ * COMPONENT
+ * ==========================================================
+ */
+
 export function CanvasToolbar({
   activeTool,
+
   onToolChange,
+
   eraserSize,
+
   onEraserSizeChange,
-  onImageUpload,
+
   canEdit,
+
   canUndo,
+
   canRedo,
+
   onUndo,
+
   onRedo,
+
+  onImageUpload,
+
+  showHand = true,
+
+  showEraser = false,
+
+  showEraserSize = true,
+
+  showImage = true,
 }: CanvasToolbarProps) {
   /*
-   * ==========================================================
-   * FILE INPUT
-   * ==========================================================
+   * ========================================================
+   * IMAGE INPUT
+   * ========================================================
    */
 
   const imageInputRef = useRef<HTMLInputElement | null>(null);
 
   /*
-   * ==========================================================
-   * REMOVE BUTTON FOCUS
-   * ==========================================================
+   * ========================================================
+   * VISIBLE TOOLS
+   * ========================================================
    */
 
-  const blurToolbarButton = () => {
+  const tools = BASE_TOOLS.filter((tool) => {
+    if (tool.id === "hand") {
+      return showHand;
+    }
+
+    return true;
+  });
+
+  /*
+   * Add Eraser immediately
+   * after Pen.
+   */
+
+  const visibleTools: ToolConfig[] = showEraser
+    ? [...tools.slice(0, 3), ERASER_TOOL, ...tools.slice(3)]
+    : tools;
+
+  /*
+   * ========================================================
+   * BLUR ACTIVE ELEMENT
+   * ========================================================
+   */
+
+  const blurActiveElement = () => {
     const activeElement = document.activeElement;
 
     if (activeElement instanceof HTMLElement) {
@@ -138,45 +259,57 @@ export function CanvasToolbar({
   };
 
   /*
-   * ==========================================================
+   * ========================================================
    * TOOL CHANGE
-   * ==========================================================
+   * ========================================================
    */
 
   const handleToolChange = (tool: CanvasTool) => {
-    blurToolbarButton();
+    if (!canEdit) {
+      return;
+    }
+
+    blurActiveElement();
 
     onToolChange(tool);
   };
 
   /*
-   * ==========================================================
+   * ========================================================
    * UNDO
-   * ==========================================================
+   * ========================================================
    */
 
   const handleUndo = () => {
-    blurToolbarButton();
+    if (!canEdit || !canUndo) {
+      return;
+    }
 
-    onUndo();
+    blurActiveElement();
+
+    void onUndo();
   };
 
   /*
-   * ==========================================================
+   * ========================================================
    * REDO
-   * ==========================================================
+   * ========================================================
    */
 
   const handleRedo = () => {
-    blurToolbarButton();
+    if (!canEdit || !canRedo) {
+      return;
+    }
 
-    onRedo();
+    blurActiveElement();
+
+    void onRedo();
   };
 
   /*
-   * ==========================================================
+   * ========================================================
    * ERASER SIZE
-   * ==========================================================
+   * ========================================================
    */
 
   const handleEraserSizeChange = (value: string) => {
@@ -186,33 +319,31 @@ export function CanvasToolbar({
   };
 
   /*
-   * ==========================================================
-   * OPEN IMAGE PICKER
-   * ==========================================================
+   * ========================================================
+   * IMAGE PICKER
+   * ========================================================
    */
 
   const handleImageButtonClick = () => {
-    if (!canEdit) {
+    const uploadImage = onImageUpload;
+
+    if (!canEdit || !uploadImage) {
       return;
     }
 
-    blurToolbarButton();
+    blurActiveElement();
 
     imageInputRef.current?.click();
   };
 
   /*
-   * ==========================================================
+   * ========================================================
    * IMAGE SELECTED
-   * ==========================================================
+   * ========================================================
    */
 
   const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-
-    /*
-     * Reset input value so the same image can be selected again.
-     */
 
     event.target.value = "";
 
@@ -220,8 +351,20 @@ export function CanvasToolbar({
       return;
     }
 
-    void onImageUpload(file);
+    const uploadImage = onImageUpload;
+
+    if (!canEdit || !uploadImage) {
+      return;
+    }
+
+    void uploadImage(file);
   };
+
+  /*
+   * ========================================================
+   * RENDER
+   * ========================================================
+   */
 
   return (
     <>
@@ -229,39 +372,49 @@ export function CanvasToolbar({
           HIDDEN IMAGE INPUT
           ==================================================== */}
 
-      <input
-        ref={imageInputRef}
-        type="file"
-        accept="image/png,image/jpeg,image/webp"
-        className="hidden"
-        onChange={handleImageChange}
-      />
+      {showImage && (
+        <input
+          ref={imageInputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          className="hidden"
+          onChange={handleImageChange}
+        />
+      )}
+
+      {/* ====================================================
+          TOOLBAR
+          ==================================================== */}
 
       <div
         className="
           absolute
           left-1/2
-          top-4
-          z-30
+          top-5
+          z-40
 
           flex
+          max-w-[calc(100%-2rem)]
           -translate-x-1/2
+
           items-center
-          gap-1
+
+          overflow-x-auto
 
           rounded-2xl
+
           border
           border-white/10
 
           bg-zinc-950/95
 
-          px-2
-          py-2
+          p-1
 
           shadow-2xl
+
           backdrop-blur-xl
 
-          whitespace-nowrap
+          scrollbar-none
         "
       >
         {/* ==================================================
@@ -276,10 +429,12 @@ export function CanvasToolbar({
           }}
           onClick={handleUndo}
           title="Undo (Ctrl + Z)"
+          aria-label="Undo"
           className="
             flex
             h-9
             w-9
+            shrink-0
             items-center
             justify-center
 
@@ -288,15 +443,16 @@ export function CanvasToolbar({
             text-zinc-400
 
             outline-none
-            focus:outline-none
-            focus-visible:outline-none
-            focus-visible:ring-0
 
             transition-all
             duration-150
 
             hover:bg-white/10
             hover:text-white
+
+            focus:outline-none
+            focus-visible:outline-none
+            focus-visible:ring-0
 
             disabled:cursor-not-allowed
             disabled:opacity-30
@@ -317,10 +473,12 @@ export function CanvasToolbar({
           }}
           onClick={handleRedo}
           title="Redo (Ctrl + Y)"
+          aria-label="Redo"
           className="
             flex
             h-9
             w-9
+            shrink-0
             items-center
             justify-center
 
@@ -329,15 +487,16 @@ export function CanvasToolbar({
             text-zinc-400
 
             outline-none
-            focus:outline-none
-            focus-visible:outline-none
-            focus-visible:ring-0
 
             transition-all
             duration-150
 
             hover:bg-white/10
             hover:text-white
+
+            focus:outline-none
+            focus-visible:outline-none
+            focus-visible:ring-0
 
             disabled:cursor-not-allowed
             disabled:opacity-30
@@ -350,13 +509,21 @@ export function CanvasToolbar({
             DIVIDER
             ================================================== */}
 
-        <div className="mx-1 h-6 w-px bg-white/10" />
+        <div
+          className="
+            mx-1
+            h-6
+            w-px
+            shrink-0
+            bg-white/10
+          "
+        />
 
         {/* ==================================================
             TOOLS
             ================================================== */}
 
-        {tools.map((tool) => {
+        {visibleTools.map((tool) => {
           const isActive = activeTool === tool.id;
 
           return (
@@ -370,35 +537,41 @@ export function CanvasToolbar({
               onClick={() => handleToolChange(tool.id)}
               title={`${tool.label} (${tool.shortcut})`}
               className={`
-                group
+                  group
 
-                flex
-                h-9
-                items-center
-                gap-1.5
+                  flex
+                  h-9
+                  shrink-0
+                  items-center
+                  gap-1.5
 
-                rounded-xl
-                px-2.5
+                  rounded-xl
+                  px-2.5
 
-                text-xs
-                font-medium
+                  text-xs
+                  font-medium
 
-                outline-none
-                focus:outline-none
-                focus-visible:outline-none
-                focus-visible:ring-0
+                  outline-none
 
-                transition-all
-                duration-150
+                  transition-all
+                  duration-150
 
-                ${
-                  isActive
-                    ? "bg-white text-zinc-900 shadow-md"
-                    : "text-zinc-400 hover:bg-white/10 hover:text-white"
-                }
+                  focus:outline-none
+                  focus-visible:outline-none
+                  focus-visible:ring-0
 
-                ${!canEdit ? "cursor-not-allowed opacity-50" : "cursor-pointer"}
-              `}
+                  ${
+                    isActive
+                      ? "bg-white text-zinc-900 shadow-md"
+                      : "text-zinc-400 hover:bg-white/10 hover:text-white"
+                  }
+
+                  ${
+                    !canEdit
+                      ? "cursor-not-allowed opacity-50"
+                      : "cursor-pointer"
+                  }
+                `}
             >
               {tool.icon}
 
@@ -406,20 +579,20 @@ export function CanvasToolbar({
 
               <span
                 className={`
-                  rounded-md
+                    rounded-md
 
-                  px-1
-                  py-0.5
+                    px-1
+                    py-0.5
 
-                  text-[9px]
-                  font-semibold
+                    text-[9px]
+                    font-semibold
 
-                  ${
-                    isActive
-                      ? "bg-zinc-200 text-zinc-700"
-                      : "bg-white/10 text-zinc-500"
-                  }
-                `}
+                    ${
+                      isActive
+                        ? "bg-zinc-200 text-zinc-700"
+                        : "bg-white/10 text-zinc-500"
+                    }
+                  `}
               >
                 {tool.shortcut}
               </span>
@@ -431,77 +604,88 @@ export function CanvasToolbar({
             IMAGE
             ================================================== */}
 
-        <button
-          type="button"
-          disabled={!canEdit}
-          onMouseDown={(event) => {
-            event.preventDefault();
-          }}
-          onClick={handleImageButtonClick}
-          title="Insert Image"
-          className={`
-            group
-
-            flex
-            h-9
-            items-center
-            gap-1.5
-
-            rounded-xl
-            px-2.5
-
-            text-xs
-            font-medium
-
-            outline-none
-            focus:outline-none
-            focus-visible:outline-none
-            focus-visible:ring-0
-
-            transition-all
-            duration-150
-
-            text-zinc-400
-            hover:bg-white/10
-            hover:text-white
-
-            ${!canEdit ? "cursor-not-allowed opacity-50" : "cursor-pointer"}
-          `}
-        >
-          <ImagePlus className="h-4 w-4" />
-
-          <span className="hidden md:inline">Image</span>
-
-          <span
+        {showImage && (
+          <button
+            type="button"
+            disabled={!canEdit || !onImageUpload}
+            onMouseDown={(event) => {
+              event.preventDefault();
+            }}
+            onClick={handleImageButtonClick}
+            title="Insert Image (I)"
             className="
-              rounded-md
-              bg-white/10
-              px-1
-              py-0.5
+              group
 
-              text-[9px]
-              font-semibold
-              text-zinc-500
+              flex
+              h-9
+              shrink-0
+              items-center
+              gap-1.5
+
+              rounded-xl
+              px-2.5
+
+              text-xs
+              font-medium
+
+              text-zinc-400
+
+              outline-none
+
+              transition-all
+              duration-150
+
+              hover:bg-white/10
+              hover:text-white
+
+              focus:outline-none
+              focus-visible:outline-none
+              focus-visible:ring-0
+
+              disabled:cursor-not-allowed
+              disabled:opacity-50
             "
           >
-            I
-          </span>
-        </button>
+            <ImagePlus className="h-4 w-4" />
+
+            <span className="hidden md:inline">Image</span>
+
+            <span
+              className="
+                rounded-md
+
+                bg-white/10
+
+                px-1
+                py-0.5
+
+                text-[9px]
+                font-semibold
+                text-zinc-500
+              "
+            >
+              I
+            </span>
+          </button>
+        )}
 
         {/* ==================================================
-            ERASER SIZE
+            INFINITE ERASER SIZE ONLY
             ================================================== */}
 
-        {activeTool === "eraser" && canEdit && (
+        {showEraserSize && showEraser && activeTool === "eraser" && canEdit && (
           <div
             className="
-              ml-1
-              flex
-              items-center
-              border-l
-              border-white/10
-              pl-2
-            "
+                ml-1
+                flex
+                shrink-0
+                items-center
+
+                border-l
+                border-white/10
+
+                pl-2
+              "
           >
             <label className="sr-only" htmlFor="eraser-size">
               Eraser size
@@ -514,34 +698,35 @@ export function CanvasToolbar({
               onMouseDown={(event) => {
                 event.stopPropagation();
               }}
-              onBlur={blurToolbarButton}
               className="
-                h-9
-                rounded-xl
+                  h-9
 
-                border
-                border-white/10
+                  rounded-xl
 
-                bg-white/10
+                  border
+                  border-white/10
 
-                px-2
+                  bg-white/10
 
-                text-xs
-                font-medium
-                text-white
+                  px-2
 
-                outline-none
+                  text-xs
+                  font-medium
+                  text-white
 
-                transition
+                  outline-none
 
-                hover:bg-white/15
-              "
+                  transition
+
+                  hover:bg-white/15
+
+                  focus:outline-none
+                "
               aria-label="Eraser size"
-              title="Eraser size"
             >
               {ERASER_SIZES.map((size) => (
                 <option key={size} value={size} className="bg-zinc-950">
-                  {size}px
+                  {size} px
                 </option>
               ))}
             </select>
