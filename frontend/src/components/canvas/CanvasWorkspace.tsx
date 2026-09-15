@@ -638,6 +638,7 @@ export function CanvasWorkspace({
 
       {board.type === "INFINITE" && (
         <InfiniteCanvas
+          pageId={currentPage.id}
           canvasData={currentPage.canvasData}
           canEdit={canEdit}
           activeTool={activeTool}

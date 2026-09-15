@@ -31,6 +31,8 @@ type HistoryActions = {
 };
 
 type InfiniteCanvasProps = {
+  pageId: string;
+
   canvasData: Record<string, unknown>;
 
   canEdit: boolean;
@@ -113,6 +115,7 @@ const PEN_CURSOR = `url("data:image/svg+xml,${encodeURIComponent(
  */
 
 export function InfiniteCanvas({
+  pageId,
   canvasData,
   canEdit,
   activeTool,
@@ -204,6 +207,8 @@ export function InfiniteCanvas({
   const redoHistoryRef = useRef<string[]>([]);
 
   const restoringHistoryRef = useRef(false);
+
+  const historyBusyRef = useRef(false);
 
   /*
    * ========================================================
@@ -382,13 +387,54 @@ export function InfiniteCanvas({
       return;
     }
 
+    if (canvas.destroyed || canvas.disposed) {
+      return;
+    }
+
     restoringHistoryRef.current = true;
 
-    try {
-      canvas.clear();
+    /*
+     * IMPORTANT
+     *
+     * DO NOT call canvas.clear() here.
+     *
+     * Fabric's loadFromJSON() replaces the canvas object
+     * collection itself. Calling clear() first creates a
+     * visible blank frame.
+     */
+    const previousRenderOnAddRemove = canvas.renderOnAddRemove;
 
+    canvas.renderOnAddRemove = false;
+
+    try {
+      /*
+       * Discard selection without clearing the canvas.
+       */
+      canvas.discardActiveObject();
+
+      /*
+       * Replace the current Fabric objects with the
+       * snapshot.
+       *
+       * There is intentionally NO canvas.clear() before this.
+       */
       await canvas.loadFromJSON(JSON.parse(snapshot));
 
+      /*
+       * The canvas may have been destroyed/replaced while
+       * asynchronous JSON loading was running.
+       */
+      if (
+        fabricCanvasRef.current !== canvas ||
+        canvas.destroyed ||
+        canvas.disposed
+      ) {
+        return;
+      }
+
+      /*
+       * Restore object-level Fabric configuration.
+       */
       canvas.getObjects().forEach((object) => {
         object.set({
           erasable: true,
@@ -406,12 +452,27 @@ export function InfiniteCanvas({
         }
       });
 
+      /*
+       * Make sure nothing remains selected after undo/redo.
+       */
       canvas.discardActiveObject();
 
+      /*
+       * Render only the final restored state.
+       */
       canvas.requestRenderAll();
     } catch (error) {
       console.error("Failed to restore canvas snapshot:", error);
     } finally {
+      /*
+       * Always restore the previous Fabric setting.
+       */
+      if (!canvas.destroyed && !canvas.disposed) {
+        canvas.renderOnAddRemove = previousRenderOnAddRemove;
+
+        canvas.requestRenderAll();
+      }
+
       restoringHistoryRef.current = false;
     }
   };
@@ -423,32 +484,38 @@ export function InfiniteCanvas({
    */
 
   const undo = async () => {
-    if (historyRef.current.length <= 1) {
+    if (historyBusyRef.current || historyRef.current.length <= 1) {
       return;
     }
 
-    const currentState = historyRef.current.pop();
+    historyBusyRef.current = true;
 
-    if (!currentState) {
-      return;
-    }
+    try {
+      const currentState = historyRef.current.pop();
 
-    redoHistoryRef.current.push(currentState);
+      if (!currentState) {
+        return;
+      }
 
-    const previousState = historyRef.current[historyRef.current.length - 1];
+      redoHistoryRef.current.push(currentState);
 
-    if (!previousState) {
-      return;
-    }
+      const previousState = historyRef.current[historyRef.current.length - 1];
 
-    await restoreSnapshot(previousState);
+      if (!previousState) {
+        return;
+      }
 
-    notifyHistoryChange();
+      await restoreSnapshot(previousState);
 
-    const canvas = fabricCanvasRef.current;
+      notifyHistoryChange();
 
-    if (canvas) {
-      onCanvasChangeRef.current?.(canvas.toJSON() as Record<string, unknown>);
+      const canvas = fabricCanvasRef.current;
+
+      if (canvas) {
+        onCanvasChangeRef.current?.(canvas.toJSON() as Record<string, unknown>);
+      }
+    } finally {
+      historyBusyRef.current = false;
     }
   };
 
@@ -459,22 +526,34 @@ export function InfiniteCanvas({
    */
 
   const redo = async () => {
-    const nextState = redoHistoryRef.current.pop();
+    if (historyBusyRef.current) {
+      return;
+    }
+
+    const nextState = redoHistoryRef.current[redoHistoryRef.current.length - 1];
 
     if (!nextState) {
       return;
     }
 
-    historyRef.current.push(nextState);
+    historyBusyRef.current = true;
 
-    await restoreSnapshot(nextState);
+    try {
+      redoHistoryRef.current.pop();
 
-    notifyHistoryChange();
+      historyRef.current.push(nextState);
 
-    const canvas = fabricCanvasRef.current;
+      await restoreSnapshot(nextState);
 
-    if (canvas) {
-      onCanvasChangeRef.current?.(canvas.toJSON() as Record<string, unknown>);
+      notifyHistoryChange();
+
+      const canvas = fabricCanvasRef.current;
+
+      if (canvas) {
+        onCanvasChangeRef.current?.(canvas.toJSON() as Record<string, unknown>);
+      }
+    } finally {
+      historyBusyRef.current = false;
     }
   };
 
@@ -1959,11 +2038,6 @@ export function InfiniteCanvas({
     return () => {
       cancelled = true;
 
-      /*
-       * Prevent callbacks from treating cleanup as a
-       * user modification.
-       */
-
       isInitializingRef.current = true;
 
       resizeObserver.disconnect();
@@ -2000,11 +2074,13 @@ export function InfiniteCanvas({
         fabricCanvasRef.current = null;
       }
 
-      canvas.dispose();
+      void canvas.dispose().catch((error) => {
+        console.error("Failed to dispose Fabric canvas:", error);
+      });
     };
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canvasData]);
+  }, [pageId]);
 
   /*
    * ==========================================================
