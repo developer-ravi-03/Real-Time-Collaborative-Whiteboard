@@ -130,19 +130,26 @@ export default function BoardClient({ boardId }: BoardClientProps) {
 
   /*
    * ========================================================
-   * REALTIME
+   * BOARD DELETE NOTIFICATION
    * ========================================================
    *
-   * BoardClient owns the board-level Socket.IO
-   * connection.
+   * When another user deletes the board that this client
+   * currently has open:
    *
-   * CanvasWorkspace only consumes:
-   *
-   *     remoteCanvasUpdate
-   *     onCanvasRealtimeUpdate
-   *
-   * Persistence remains handled separately by
-   * useCanvasPersistence.
+   *     socket event
+   *          ↓
+   *     notification
+   *          ↓
+   *     redirect to room
+   */
+
+  const [boardDeletedNotification, setBoardDeletedNotification] =
+    useState(false);
+
+  /*
+   * ========================================================
+   * REALTIME
+   * ========================================================
    */
 
   const {
@@ -150,26 +157,62 @@ export default function BoardClient({ boardId }: BoardClientProps) {
     roomError: realtimeError,
     remoteCanvasUpdate,
     sendCanvasUpdate,
+    remoteMemberRoleChange,
+    remoteBoardChange,
   } = useBoardRealtime(board?.roomId ?? null);
+
+  /*
+   * ========================================================
+   * APPLY BOARD INITIALIZATION
+   * ========================================================
+   *
+   * Keeps board state updates in one place.
+   *
+   * Used by:
+   *
+   *     1. Initial board loading
+   *     2. Role-change realtime refresh
+   */
+
+  const applyBoardInitialization = useCallback((data: BoardInitialization) => {
+    setBoard(data.board);
+
+    setPages(data.pages);
+
+    setCurrentPage(data.currentPage);
+
+    setYourRole(data.yourRole);
+
+    if (data.currentPage) {
+      setSelectedPageId(data.currentPage.id);
+    }
+  }, []);
+
+  /*
+   * ========================================================
+   * REFRESH BOARD
+   * ========================================================
+   *
+   * REST remains the source of truth.
+   *
+   * Socket.IO only tells us that the state changed.
+   */
+
+  const refreshBoard = useCallback(async () => {
+    const response = await apiRequest<ApiResponse<BoardInitialization>>(
+      getToken,
+      `/boards/${boardId}/initialize`,
+    );
+
+    applyBoardInitialization(response.data);
+
+    return response.data;
+  }, [applyBoardInitialization, boardId, getToken]);
 
   /*
    * ========================================================
    * CANVAS REALTIME BRIDGE
    * ========================================================
-   *
-   * Local canvas mutation:
-   *
-   *     Canvas
-   *        ↓
-   *     CanvasWorkspace
-   *        ↓
-   *     BoardClient
-   *        ↓
-   *     Socket.IO
-   *
-   * This function does NOT save to PostgreSQL.
-   *
-   * REST autosave remains responsible for persistence.
    */
 
   const handleCanvasRealtimeUpdate = useCallback(
@@ -178,6 +221,108 @@ export default function BoardClient({ boardId }: BoardClientProps) {
     },
     [sendCanvasUpdate],
   );
+
+  /*
+   * ========================================================
+   * BOARD REALTIME
+   * ========================================================
+   *
+   * Handle board changes received from other users.
+   *
+   * created / updated:
+   *     refresh current board state.
+   *
+   * deleted:
+   *     if this exact board was deleted,
+   *     notify the user and redirect to room.
+   */
+
+  useEffect(() => {
+    if (!remoteBoardChange) {
+      return;
+    }
+
+    /*
+     * ======================================================
+     * CURRENT BOARD DELETED
+     * ======================================================
+     */
+
+    if (
+      remoteBoardChange.action === "deleted" &&
+      remoteBoardChange.boardId === boardId
+    ) {
+      const notificationTimer = window.setTimeout(() => {
+        setBoardDeletedNotification(true);
+      }, 0);
+
+      const redirectTimer = window.setTimeout(() => {
+        if (board?.roomId) {
+          router.replace(`/room/${board.roomId}`);
+        } else {
+          router.replace("/dashboard");
+        }
+      }, 1200);
+
+      return () => {
+        window.clearTimeout(notificationTimer);
+        window.clearTimeout(redirectTimer);
+      };
+    }
+
+    /*
+     * ======================================================
+     * OTHER BOARD CREATED / UPDATED
+     * ======================================================
+     */
+
+    if (
+      remoteBoardChange.action === "created" ||
+      remoteBoardChange.action === "updated"
+    ) {
+      const refreshTimer = window.setTimeout(() => {
+        void refreshBoard();
+      }, 0);
+
+      return () => {
+        window.clearTimeout(refreshTimer);
+      };
+    }
+  }, [boardId, board?.roomId, refreshBoard, remoteBoardChange, router]);
+
+  /*
+   * ========================================================
+   * MEMBER ROLE REALTIME
+   * ========================================================
+   *
+   * A role change can affect:
+   *
+   *     - yourRole
+   *     - canEdit
+   *     - page permissions
+   *     - canvas permissions
+   */
+
+  useEffect(() => {
+    if (!remoteMemberRoleChange) {
+      return;
+    }
+
+    /*
+     * Do not refresh synchronously inside the effect.
+     *
+     * This avoids React Compiler's cascading-render
+     * warning.
+     */
+
+    const refreshTimer = window.setTimeout(() => {
+      void refreshBoard();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(refreshTimer);
+    };
+  }, [remoteMemberRoleChange, refreshBoard]);
 
   /*
    * ========================================================
@@ -269,9 +414,6 @@ export default function BoardClient({ boardId }: BoardClientProps) {
        * ----------------------------------------------------
        * Load complete page
        * ----------------------------------------------------
-       *
-       * Create-page response may not contain the
-       * complete CurrentPage structure.
        */
 
       const pageResponse = await apiRequest<ApiResponse<CurrentPage>>(
@@ -631,31 +773,13 @@ export default function BoardClient({ boardId }: BoardClientProps) {
           return;
         }
 
-        const data = response.data;
-
         /*
          * ------------------------------------------------
-         * Store board state
+         * Apply board state
          * ------------------------------------------------
          */
 
-        setBoard(data.board);
-
-        setPages(data.pages);
-
-        setCurrentPage(data.currentPage);
-
-        setYourRole(data.yourRole);
-
-        /*
-         * ------------------------------------------------
-         * Select initial page
-         * ------------------------------------------------
-         */
-
-        if (data.currentPage) {
-          setSelectedPageId(data.currentPage.id);
-        }
+        applyBoardInitialization(response.data);
       } catch (error) {
         if (cancelled) {
           return;
@@ -678,7 +802,7 @@ export default function BoardClient({ boardId }: BoardClientProps) {
     return () => {
       cancelled = true;
     };
-  }, [boardId, isLoaded, isSignedIn, getToken]);
+  }, [boardId, isLoaded, isSignedIn, getToken, applyBoardInitialization]);
 
   /*
    * ========================================================
@@ -708,12 +832,7 @@ export default function BoardClient({ boardId }: BoardClientProps) {
             px-6
           "
         >
-          <div
-            className="
-              max-w-md
-              text-center
-            "
-          >
+          <div className="max-w-md text-center">
             <h1 className="text-xl font-semibold">Unable to load board</h1>
 
             <p className="mt-2 text-sm text-destructive">
@@ -773,13 +892,69 @@ export default function BoardClient({ boardId }: BoardClientProps) {
       "
     >
       {/* ==================================================
+          BOARD DELETED NOTIFICATION
+          ================================================== */}
+
+      {boardDeletedNotification && (
+        <div
+          className="
+            fixed
+            left-1/2
+            top-6
+            z-50
+            w-[calc(100%-2rem)]
+            max-w-md
+            -translate-x-1/2
+            rounded-xl
+            border
+            border-red-500/30
+            bg-red-950
+            px-4
+            py-3
+            text-white
+            shadow-2xl
+          "
+          role="alert"
+          aria-live="assertive"
+        >
+          <div className="flex items-start gap-3">
+            <div
+              className="
+                mt-0.5
+                flex
+                h-8
+                w-8
+                shrink-0
+                items-center
+                justify-center
+                rounded-full
+                bg-red-500/20
+                text-red-300
+              "
+            >
+              !
+            </div>
+
+            <div className="min-w-0">
+              <p className="text-sm font-semibold">Board deleted</p>
+
+              <p className="mt-1 text-xs text-red-100/80">
+                This board was deleted by another member. Redirecting you to the
+                room...
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================================================
           BOARD HEADER
           ================================================== */}
 
       <BoardHeader board={board} realtimeStatus={realtimeStatus} />
 
       {/*
-       * Keep realtime errors accessible
+       * Realtime errors remain accessible
        * without disturbing the layout.
        */}
 

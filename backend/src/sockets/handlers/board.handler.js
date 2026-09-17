@@ -1,52 +1,123 @@
-import BoardService from "../../modules/board/board.service.js";
-import PageService from "../../modules/board/page.service.js";
-import { emitCanvasInitialization } from "../utils/canvas.utils.js";
 import { SOCKET_EVENTS } from "../constants/socket.events.js";
+
 import {
   ensureJoinedRoom,
   ensureSameRoom,
 } from "../utils/socket-auth.utils.js";
 
+import BoardService from "../../modules/board/board.service.js";
+
+const BOARD_ACTIONS = new Set(["created", "updated", "deleted"]);
+
 export default function registerBoardEvents(io, socket) {
-  socket.on(SOCKET_EVENTS.BOARD_CHANGE, async ({ boardId }, callback) => {
+  socket.on(SOCKET_EVENTS.BOARD_CHANGE, async (data, callback) => {
     try {
-      /* -------------------------------------------------------------------------- */
-      /*                           Room Validation                                  */
-      /* -------------------------------------------------------------------------- */
+      /*
+       * ======================================================
+       * CALLBACK
+       * ======================================================
+       */
 
-      if (!ensureJoinedRoom(socket, callback)) return;
+      if (typeof callback !== "function") {
+        callback = () => {};
+      }
 
-      /* -------------------------------------------------------------------------- */
-      /*                              Load Board                                    */
-      /* -------------------------------------------------------------------------- */
+      /*
+       * ======================================================
+       * ROOM VALIDATION
+       * ======================================================
+       */
 
-      const board = await BoardService.getBoardInitialization(boardId);
+      if (!ensureJoinedRoom(socket, callback)) {
+        return;
+      }
 
-      /* -------------------------------------------------------------------------- */
-      /*                           Security Check                                   */
-      /* -------------------------------------------------------------------------- */
+      /*
+       * ======================================================
+       * PAYLOAD
+       * ======================================================
+       */
 
-      if (!ensureSameRoom(socket, board.roomId, callback)) return;
+      const boardId =
+        typeof data?.boardId === "string" ? data.boardId.trim() : "";
 
-      /* -------------------------------------------------------------------------- */
-      /*                           First Page                                       */
-      /* -------------------------------------------------------------------------- */
+      const action = typeof data?.action === "string" ? data.action.trim() : "";
 
-      const page = await PageService.getFirstPage(board.id);
+      if (!boardId) {
+        return callback({
+          success: false,
+          message: "Board ID is required.",
+        });
+      }
 
-      /* -------------------------------------------------------------------------- */
-      /*                           Canvas Init                                      */
-      /* -------------------------------------------------------------------------- */
+      if (!BOARD_ACTIONS.has(action)) {
+        return callback({
+          success: false,
+          message: "Invalid board action.",
+        });
+      }
 
-      emitCanvasInitialization(socket, board, page);
+      /*
+       * ======================================================
+       * BOARD VALIDATION
+       * ======================================================
+       *
+       * For created/updated boards the board must exist.
+       *
+       * For deleted boards it is already gone from DB,
+       * therefore we only validate the room membership.
+       */
 
-      callback({
+      if (action !== "deleted") {
+        const board = await BoardService.getBoard(boardId);
+
+        if (!board) {
+          return callback({
+            success: false,
+            message: "Board not found.",
+          });
+        }
+
+        if (!ensureSameRoom(socket, board.roomId, callback)) {
+          return;
+        }
+      }
+
+      /*
+       * ======================================================
+       * BROADCAST
+       * ======================================================
+       *
+       * socket.to(...)
+       *
+       * sender       ❌
+       * other users  ✅
+       */
+
+      socket.to(socket.currentRoomId).emit(SOCKET_EVENTS.BOARD_CHANGED, {
+        boardId,
+        action,
+        userId: socket.user.id,
+      });
+
+      /*
+       * ======================================================
+       * ACK
+       * ======================================================
+       */
+
+      return callback({
         success: true,
       });
     } catch (error) {
-      callback({
+      console.error("[Socket] Board change failed:", error);
+
+      return callback({
         success: false,
-        message: error.message,
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to broadcast board change.",
       });
     }
   });

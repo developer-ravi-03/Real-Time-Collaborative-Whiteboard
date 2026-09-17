@@ -63,6 +63,43 @@ type RemoteCanvasState = {
   update: CanvasRealtimeUpdate;
 };
 
+// board types
+export type BoardChangeAction = "created" | "updated" | "deleted";
+
+export type BoardRealtimeChange = {
+  boardId: string;
+  action: BoardChangeAction;
+  userId?: string;
+};
+
+type BoardChangeResponse = {
+  success: boolean;
+  message?: string;
+};
+
+type RemoteBoardState = {
+  roomId: string;
+  change: BoardRealtimeChange;
+};
+
+//member type
+export type MemberRoleChange = {
+  memberId: string;
+  role: string;
+  action: "role-updated";
+  userId?: string;
+};
+
+type MemberRoleChangeResponse = {
+  success: boolean;
+  message?: string;
+};
+
+type RemoteMemberRoleState = {
+  roomId: string;
+  change: MemberRoleChange;
+};
+
 /*
  * ==========================================================
  * HOOK
@@ -96,6 +133,12 @@ export function useBoardRealtime(roomId: string | null) {
 
   const [remoteCanvasState, setRemoteCanvasState] =
     useState<RemoteCanvasState | null>(null);
+
+  const [remoteBoardState, setRemoteBoardState] =
+    useState<RemoteBoardState | null>(null);
+
+  const [remoteMemberRoleState, setRemoteMemberRoleState] =
+    useState<RemoteMemberRoleState | null>(null);
 
   /*
    * ========================================================
@@ -140,6 +183,14 @@ export function useBoardRealtime(roomId: string | null) {
 
   const remoteCanvasUpdate =
     remoteCanvasState?.roomId === roomId ? remoteCanvasState.update : null;
+
+  const remoteBoardChange =
+    remoteBoardState?.roomId === roomId ? remoteBoardState.change : null;
+
+  const remoteMemberRoleChange =
+    remoteMemberRoleState?.roomId === roomId
+      ? remoteMemberRoleState.change
+      : null;
 
   /*
    * ========================================================
@@ -246,6 +297,103 @@ export function useBoardRealtime(roomId: string | null) {
           if (!response?.success) {
             console.warn(
               "[Realtime] Canvas update rejected:",
+              response?.message ?? "Unknown server error.",
+            );
+          }
+        },
+      );
+
+      return true;
+    },
+    [roomId],
+  );
+
+  const sendBoardChange = useCallback(
+    (boardId: string, action: BoardChangeAction): boolean => {
+      if (!boardId) {
+        console.warn("[Realtime] Cannot send board change without boardId.");
+
+        return false;
+      }
+
+      if (!socket.connected) {
+        console.warn(
+          "[Realtime] Cannot send board change: socket disconnected.",
+        );
+
+        return false;
+      }
+
+      if (!roomId || joinedRoomIdRef.current !== roomId) {
+        console.warn("[Realtime] Cannot send board change: room not joined.");
+
+        return false;
+      }
+
+      socket.emit(
+        "board:change",
+        {
+          boardId,
+          action,
+        },
+        (response: BoardChangeResponse) => {
+          if (!response?.success) {
+            console.warn(
+              "[Realtime] Board change rejected:",
+              response?.message ?? "Unknown server error.",
+            );
+          }
+        },
+      );
+
+      return true;
+    },
+    [roomId],
+  );
+
+  const sendMemberRoleChange = useCallback(
+    (memberId: string, role: string): boolean => {
+      if (!memberId) {
+        console.warn(
+          "[Realtime] Cannot send member role change without memberId.",
+        );
+
+        return false;
+      }
+
+      if (!role) {
+        console.warn("[Realtime] Cannot send member role change without role.");
+
+        return false;
+      }
+
+      if (!socket.connected) {
+        console.warn(
+          "[Realtime] Cannot send member role change: socket disconnected.",
+        );
+
+        return false;
+      }
+
+      if (!roomId || joinedRoomIdRef.current !== roomId) {
+        console.warn(
+          "[Realtime] Cannot send member role change: room not joined.",
+        );
+
+        return false;
+      }
+
+      socket.emit(
+        "member:role-change",
+        {
+          memberId,
+          role,
+          action: "role-updated",
+        },
+        (response: MemberRoleChangeResponse) => {
+          if (!response?.success) {
+            console.warn(
+              "[Realtime] Member role change rejected:",
               response?.message ?? "Unknown server error.",
             );
           }
@@ -499,6 +647,86 @@ export function useBoardRealtime(roomId: string | null) {
       });
     };
 
+    const handleBoardChanged = (change: BoardRealtimeChange) => {
+      if (cancelled) {
+        return;
+      }
+
+      if (!change) {
+        return;
+      }
+
+      if (typeof change.boardId !== "string") {
+        console.warn("[Realtime] Ignoring board change without valid boardId.");
+
+        return;
+      }
+
+      if (
+        change.action !== "created" &&
+        change.action !== "updated" &&
+        change.action !== "deleted"
+      ) {
+        console.warn("[Realtime] Ignoring invalid board action.");
+
+        return;
+      }
+
+      setRemoteBoardState({
+        roomId,
+        change,
+      });
+
+      console.info("[Realtime] Board changed:", {
+        boardId: change.boardId,
+        action: change.action,
+        userId: change.userId ?? "another user",
+      });
+    };
+
+    const handleMemberRoleChanged = (change: MemberRoleChange) => {
+      if (cancelled) {
+        return;
+      }
+
+      if (!change) {
+        return;
+      }
+
+      if (typeof change.memberId !== "string") {
+        console.warn(
+          "[Realtime] Ignoring member role change without valid memberId.",
+        );
+
+        return;
+      }
+
+      if (typeof change.role !== "string") {
+        console.warn(
+          "[Realtime] Ignoring member role change without valid role.",
+        );
+
+        return;
+      }
+
+      if (change.action !== "role-updated") {
+        console.warn("[Realtime] Ignoring invalid member role change action.");
+
+        return;
+      }
+
+      setRemoteMemberRoleState({
+        roomId,
+        change,
+      });
+
+      console.info("[Realtime] Member role changed:", {
+        memberId: change.memberId,
+        role: change.role,
+        userId: change.userId ?? "another user",
+      });
+    };
+
     /*
      * ======================================================
      * REGISTER EVENTS
@@ -512,6 +740,10 @@ export function useBoardRealtime(roomId: string | null) {
     socket.on("disconnect", handleDisconnect);
 
     socket.on("canvas:updated", handleCanvasUpdated);
+
+    socket.on("board:changed", handleBoardChanged);
+
+    socket.on("member:role-changed", handleMemberRoleChanged);
 
     /*
      * ======================================================
@@ -548,6 +780,10 @@ export function useBoardRealtime(roomId: string | null) {
       socket.off("disconnect", handleDisconnect);
 
       socket.off("canvas:updated", handleCanvasUpdated);
+
+      socket.off("board:changed", handleBoardChanged);
+
+      socket.off("member:role-changed", handleMemberRoleChanged);
 
       /*
        * ----------------------------------------------------
@@ -598,6 +834,14 @@ export function useBoardRealtime(roomId: string | null) {
       setRemoteCanvasState((current) =>
         current?.roomId === roomId ? null : current,
       );
+
+      setRemoteBoardState((current) =>
+        current?.roomId === roomId ? null : current,
+      );
+
+      setRemoteMemberRoleState((current) =>
+        current?.roomId === roomId ? null : current,
+      );
     };
   }, [roomId, isLoaded, isSignedIn]);
 
@@ -613,9 +857,7 @@ export function useBoardRealtime(roomId: string | null) {
      */
 
     status,
-
     isConnected,
-
     isJoined,
 
     /*
@@ -623,7 +865,6 @@ export function useBoardRealtime(roomId: string | null) {
      */
 
     roomError,
-
     roomUsers,
 
     /*
@@ -633,9 +874,19 @@ export function useBoardRealtime(roomId: string | null) {
     remoteCanvasUpdate,
 
     /*
+     * Board realtime
+     */
+
+    remoteBoardChange,
+
+    remoteMemberRoleChange,
+
+    /*
      * Actions
      */
 
     sendCanvasUpdate,
+    sendBoardChange,
+    sendMemberRoleChange,
   };
 }

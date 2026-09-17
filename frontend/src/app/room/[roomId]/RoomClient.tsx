@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { apiRequest } from "@/lib/api-client";
 import type { ApiResponse } from "@/types/api";
@@ -14,6 +14,7 @@ import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { EditRoomModal } from "@/components/room/EditRoomModal";
 import { CreateBoardModal } from "@/components/room/CreateBoardModal";
 import { EditBoardModal } from "@/components/room/EditBoardModal";
+import { useBoardRealtime } from "@/hooks/useBoardRealtime";
 
 type RoomClientProps = {
   roomId: string;
@@ -38,6 +39,13 @@ export default function RoomClient({ roomId }: RoomClientProps) {
   const [error, setError] = useState<string | null>(null);
 
   const router = useRouter();
+
+  const {
+    remoteBoardChange,
+    sendBoardChange,
+    remoteMemberRoleChange,
+    sendMemberRoleChange,
+  } = useBoardRealtime(roomId);
 
   const [showEditRoom, setShowEditRoom] = useState(false);
 
@@ -206,6 +214,9 @@ export default function RoomClient({ roomId }: RoomClientProps) {
         },
       );
 
+      /*
+       * Update current client immediately.
+       */
       setRoom((current) => {
         if (!current) return current;
 
@@ -221,6 +232,14 @@ export default function RoomClient({ roomId }: RoomClientProps) {
           ),
         };
       });
+
+      /*
+       * Notify other connected clients.
+       *
+       * REST API has already completed the actual
+       * database mutation.
+       */
+      sendMemberRoleChange(memberId, role);
     } catch (error) {
       console.error("Failed to update member role:", error);
     } finally {
@@ -281,6 +300,7 @@ export default function RoomClient({ roomId }: RoomClientProps) {
         },
       );
 
+      // Update current client immediately.
       setRoom((current) =>
         current
           ? {
@@ -289,6 +309,9 @@ export default function RoomClient({ roomId }: RoomClientProps) {
             }
           : current,
       );
+
+      // Notify other clients about the successful REST mutation.
+      sendBoardChange(response.data.id, "created");
 
       setBoardName("");
       setBoardDescription("");
@@ -342,6 +365,7 @@ export default function RoomClient({ roomId }: RoomClientProps) {
         },
       );
 
+      // Update current client immediately.
       setRoom((current) =>
         current
           ? {
@@ -352,6 +376,9 @@ export default function RoomClient({ roomId }: RoomClientProps) {
             }
           : current,
       );
+
+      // Notify other clients about the successful REST mutation.
+      sendBoardChange(response.data.id, "updated");
 
       setShowEditBoard(false);
       setSelectedBoardId(null);
@@ -367,32 +394,86 @@ export default function RoomClient({ roomId }: RoomClientProps) {
   const handleDeleteBoard = async () => {
     if (!selectedBoardId) return;
 
+    /*
+     * Store the ID before deleting because selectedBoardId
+     * will be cleared after the operation.
+     */
+    const boardIdToDelete = selectedBoardId;
+
     try {
       setBoardLoading(true);
+      setBoardError(null);
 
-      await apiRequest(getToken, `/boards/${selectedBoardId}`, {
+      await apiRequest(getToken, `/boards/${boardIdToDelete}`, {
         method: "DELETE",
       });
 
+      // Update current client immediately.
       setRoom((current) =>
         current
           ? {
               ...current,
               boards: current.boards.filter(
-                (board) => board.id !== selectedBoardId,
+                (board) => board.id !== boardIdToDelete,
               ),
             }
           : current,
       );
 
+      // Notify other clients about the successful REST mutation.
+      sendBoardChange(boardIdToDelete, "deleted");
+
       setSelectedBoardId(null);
       setConfirmBoardDelete(false);
     } catch (error) {
       console.error("Failed to delete board:", error);
+
+      setBoardError(
+        error instanceof Error ? error.message : "Failed to delete board.",
+      );
     } finally {
       setBoardLoading(false);
     }
   };
+
+  const refreshRoom = useCallback(async () => {
+    const response = await apiRequest<ApiResponse<RoomDetails>>(
+      getToken,
+      `/rooms/${roomId}`,
+    );
+
+    setRoom(response.data);
+
+    return response.data;
+  }, [getToken, roomId]);
+
+  useEffect(() => {
+    if (!remoteBoardChange) {
+      return;
+    }
+
+    const refreshTimer = window.setTimeout(() => {
+      void refreshRoom();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(refreshTimer);
+    };
+  }, [remoteBoardChange, refreshRoom]);
+
+  useEffect(() => {
+    if (!remoteMemberRoleChange) {
+      return;
+    }
+
+    const refreshTimer = window.setTimeout(() => {
+      void refreshRoom();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(refreshTimer);
+    };
+  }, [remoteMemberRoleChange, refreshRoom]);
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) {
