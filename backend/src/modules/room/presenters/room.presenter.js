@@ -16,6 +16,14 @@ export const roomDetailsPresenter = (room, currentUserId) => {
 
     isSessionActive: room.isSessionActive,
 
+    /*
+     * Current authenticated user's database ID.
+     *
+     * This is intentionally exposed so the frontend can
+     * reliably identify itself in realtime events.
+     */
+    currentUserId,
+
     owner: {
       id: room.owner.id,
       displayName: room.owner.displayName,

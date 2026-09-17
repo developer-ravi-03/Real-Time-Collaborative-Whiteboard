@@ -37,6 +37,10 @@ export const SOCKET_EVENTS = {
 
   MEMBER_ROLE_CHANGED: "member:role-changed",
 
+  MEMBER_REMOVE: "member:remove",
+
+  MEMBER_REMOVED: "member:removed",
+
   /* ---------------- Sessions ---------------- */
 
   SESSION_CLOSE: "session:close",

@@ -1,8 +1,4 @@
-export type RoomRole =
-  | "OWNER"
-  | "ADMIN"
-  | "EDITOR"
-  | "VIEWER";
+export type RoomRole = "OWNER" | "ADMIN" | "EDITOR" | "VIEWER";
 
 export type Room = {
   id: string;
@@ -75,6 +71,8 @@ export type RoomDetails = {
   visibility: "PUBLIC" | "PRIVATE";
 
   isSessionActive: boolean;
+
+  currentUserId: string;
 
   owner: {
     id: string;

@@ -41,10 +41,18 @@ export default function RoomClient({ roomId }: RoomClientProps) {
   const router = useRouter();
 
   const {
+    roomUsers,
+
     remoteBoardChange,
     sendBoardChange,
+
     remoteMemberRoleChange,
     sendMemberRoleChange,
+
+    remoteMemberRemoved,
+    sendMemberRemove,
+
+    remoteSessionChange,
   } = useBoardRealtime(roomId);
 
   const [showEditRoom, setShowEditRoom] = useState(false);
@@ -78,6 +86,8 @@ export default function RoomClient({ roomId }: RoomClientProps) {
 
   const [boardLoading, setBoardLoading] = useState(false);
   const [boardError, setBoardError] = useState<string | null>(null);
+
+  const [showKickedNotification, setShowKickedNotification] = useState(false);
 
   const handleOpenEditRoom = () => {
     if (!room) return;
@@ -250,6 +260,17 @@ export default function RoomClient({ roomId }: RoomClientProps) {
   const handleRemoveMember = async (memberId: string) => {
     if (!room) return;
 
+    const memberToRemove = room.members.find(
+      (member) => member.memberId === memberId,
+    );
+
+    if (!memberToRemove) {
+      console.warn("[Room] Member not found:", memberId);
+      return;
+    }
+
+    const removedUserId = memberToRemove.user.id;
+
     try {
       setActionLoading(true);
 
@@ -257,8 +278,13 @@ export default function RoomClient({ roomId }: RoomClientProps) {
         method: "DELETE",
       });
 
+      /*
+       * Update current client's member list immediately.
+       */
       setRoom((current) => {
-        if (!current) return current;
+        if (!current) {
+          return current;
+        }
 
         return {
           ...current,
@@ -268,8 +294,21 @@ export default function RoomClient({ roomId }: RoomClientProps) {
           memberCount: Math.max(0, current.memberCount - 1),
         };
       });
+
+      /*
+       * REST mutation succeeded.
+       *
+       * Now notify the realtime layer.
+       */
+      const sent = sendMemberRemove(memberId, removedUserId);
+
+      if (!sent) {
+        console.warn(
+          "[Room] Member removed successfully, but realtime notification could not be sent.",
+        );
+      }
     } catch (error) {
-      console.error("Failed to remove member:", error);
+      console.error("[Room] Failed to remove member:", error);
     } finally {
       setActionLoading(false);
     }
@@ -475,6 +514,78 @@ export default function RoomClient({ roomId }: RoomClientProps) {
     };
   }, [remoteMemberRoleChange, refreshRoom]);
 
+  const presenceKey = roomUsers
+    .map((user) => user.userId)
+    .sort()
+    .join("|");
+
+  useEffect(() => {
+    if (!presenceKey) {
+      return;
+    }
+
+    const refreshTimer = window.setTimeout(() => {
+      void refreshRoom();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(refreshTimer);
+    };
+  }, [presenceKey, refreshRoom]);
+
+  useEffect(() => {
+    if (!remoteMemberRemoved) {
+      return;
+    }
+
+    /*
+     * The backend sends kicked=true only to the
+     * socket(s) belonging to the removed user.
+     */
+    if (remoteMemberRemoved.kicked) {
+      const notificationTimer = window.setTimeout(() => {
+        setShowKickedNotification(true);
+      }, 0);
+
+      const redirectTimer = window.setTimeout(() => {
+        router.replace("/dashboard");
+      }, 2200);
+
+      return () => {
+        window.clearTimeout(notificationTimer);
+        window.clearTimeout(redirectTimer);
+      };
+    }
+
+    /*
+     * Another member was removed.
+     *
+     * Presence update normally handles the member list,
+     * but this event also invalidates the room state.
+     */
+    const refreshTimer = window.setTimeout(() => {
+      void refreshRoom();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(refreshTimer);
+    };
+  }, [remoteMemberRemoved, refreshRoom, router]);
+
+  useEffect(() => {
+    if (!remoteSessionChange) {
+      return;
+    }
+
+    const refreshTimer = window.setTimeout(() => {
+      void refreshRoom();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(refreshTimer);
+    };
+  }, [remoteSessionChange, refreshRoom]);
+
   useEffect(() => {
     if (!isLoaded || !isSignedIn) {
       return;
@@ -562,6 +673,54 @@ export default function RoomClient({ roomId }: RoomClientProps) {
 
   return (
     <>
+      {showKickedNotification && (
+        <div
+          className="
+          fixed
+          right-5
+          top-5
+          z-[9999]
+          w-[min(380px,calc(100vw-2rem))]
+          rounded-2xl
+          border
+          border-destructive/30
+          bg-background/95
+          p-4
+          shadow-2xl
+          backdrop-blur-xl
+        "
+          role="alert"
+          aria-live="assertive"
+        >
+          <div className="flex items-start gap-3">
+            <div
+              className="
+              flex
+              h-9
+              w-9
+              shrink-0
+              items-center
+              justify-center
+              rounded-full
+              bg-destructive/10
+              text-destructive
+            "
+            >
+              !
+            </div>
+
+            <div className="min-w-0">
+              <p className="font-semibold">You were removed from this room</p>
+
+              <p className="mt-1 text-sm text-muted-foreground">
+                The room owner removed you from this room. Redirecting to
+                dashboard...
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <RoomHeader
         room={room}
         onEdit={handleOpenEditRoom}

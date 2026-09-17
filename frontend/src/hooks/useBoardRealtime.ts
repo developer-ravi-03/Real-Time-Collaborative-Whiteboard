@@ -26,6 +26,8 @@ export type RoomUser = {
   imageUrl: string | null;
 };
 
+type PresenceUpdateResponse = RoomUser[];
+
 type RoomJoinResponse = {
   success: boolean;
   message: string;
@@ -100,6 +102,41 @@ type RemoteMemberRoleState = {
   change: MemberRoleChange;
 };
 
+export type MemberRemovedChange = {
+  roomId: string;
+  memberId: string;
+  userId: string;
+  kicked?: boolean;
+  removedBy?: {
+    id: string;
+    displayName?: string | null;
+  };
+};
+
+type MemberRemoveResponse = {
+  success: boolean;
+  message?: string;
+};
+
+type RemoteMemberRemovedState = {
+  roomId: string;
+  change: MemberRemovedChange;
+};
+
+export type SessionChangeAction = "closed" | "reopened";
+
+export type SessionRealtimeChange = {
+  roomId: string;
+  action: SessionChangeAction;
+  userId?: string;
+  displayName?: string | null;
+};
+
+type RemoteSessionState = {
+  roomId: string;
+  change: SessionRealtimeChange;
+};
+
 /*
  * ==========================================================
  * HOOK
@@ -139,6 +176,12 @@ export function useBoardRealtime(roomId: string | null) {
 
   const [remoteMemberRoleState, setRemoteMemberRoleState] =
     useState<RemoteMemberRoleState | null>(null);
+
+  const [remoteMemberRemovedState, setRemoteMemberRemovedState] =
+    useState<RemoteMemberRemovedState | null>(null);
+
+  const [remoteSessionState, setRemoteSessionState] =
+    useState<RemoteSessionState | null>(null);
 
   /*
    * ========================================================
@@ -191,6 +234,14 @@ export function useBoardRealtime(roomId: string | null) {
     remoteMemberRoleState?.roomId === roomId
       ? remoteMemberRoleState.change
       : null;
+
+  const remoteMemberRemoved =
+    remoteMemberRemovedState?.roomId === roomId
+      ? remoteMemberRemovedState.change
+      : null;
+
+  const remoteSessionChange =
+    remoteSessionState?.roomId === roomId ? remoteSessionState.change : null;
 
   /*
    * ========================================================
@@ -394,6 +445,55 @@ export function useBoardRealtime(roomId: string | null) {
           if (!response?.success) {
             console.warn(
               "[Realtime] Member role change rejected:",
+              response?.message ?? "Unknown server error.",
+            );
+          }
+        },
+      );
+
+      return true;
+    },
+    [roomId],
+  );
+
+  const sendMemberRemove = useCallback(
+    (memberId: string, userId: string): boolean => {
+      if (!memberId) {
+        console.warn("[Realtime] Cannot send member removal without memberId.");
+
+        return false;
+      }
+
+      if (!userId) {
+        console.warn("[Realtime] Cannot send member removal without userId.");
+
+        return false;
+      }
+
+      if (!socket.connected) {
+        console.warn(
+          "[Realtime] Cannot send member removal: socket disconnected.",
+        );
+
+        return false;
+      }
+
+      if (!roomId || joinedRoomIdRef.current !== roomId) {
+        console.warn("[Realtime] Cannot send member removal: room not joined.");
+
+        return false;
+      }
+
+      socket.emit(
+        "member:remove",
+        {
+          memberId,
+          userId,
+        },
+        (response: MemberRemoveResponse) => {
+          if (!response?.success) {
+            console.warn(
+              "[Realtime] Member removal notification rejected:",
               response?.message ?? "Unknown server error.",
             );
           }
@@ -684,6 +784,132 @@ export function useBoardRealtime(roomId: string | null) {
       });
     };
 
+    const handlePresenceUpdate = (users: RoomUser[]) => {
+      if (cancelled) {
+        return;
+      }
+
+      if (!Array.isArray(users)) {
+        console.warn("[Realtime] Ignoring invalid presence update.");
+
+        return;
+      }
+
+      const validUsers = users.filter(
+        (user): user is RoomUser =>
+          Boolean(user) &&
+          typeof user.userId === "string" &&
+          user.userId.length > 0,
+      );
+
+      setRoomUsersState({
+        roomId,
+        users: validUsers,
+      });
+
+      console.info("[Realtime] Presence updated:", {
+        users: validUsers.length,
+      });
+    };
+
+    const handleMemberRemoved = (change: MemberRemovedChange) => {
+      if (cancelled) {
+        return;
+      }
+
+      if (!change) {
+        return;
+      }
+
+      if (
+        typeof change.roomId !== "string" ||
+        typeof change.memberId !== "string" ||
+        typeof change.userId !== "string"
+      ) {
+        console.warn("[Realtime] Ignoring invalid member removal event.");
+
+        return;
+      }
+
+      if (change.roomId !== roomId) {
+        return;
+      }
+
+      setRemoteMemberRemovedState({
+        roomId,
+        change,
+      });
+
+      console.info("[Realtime] Member removed:", {
+        memberId: change.memberId,
+        userId: change.userId,
+        kicked: change.kicked ?? false,
+        removedBy: change.removedBy?.id ?? "unknown",
+      });
+    };
+
+    const handleSessionClosed = (data: {
+      roomId: string;
+      closedBy?: {
+        id: string;
+        displayName?: string | null;
+      };
+    }) => {
+      if (cancelled) {
+        return;
+      }
+
+      if (!data || data.roomId !== roomId) {
+        return;
+      }
+
+      setRemoteSessionState({
+        roomId,
+        change: {
+          roomId,
+          action: "closed",
+          userId: data.closedBy?.id,
+          displayName: data.closedBy?.displayName,
+        },
+      });
+
+      console.info("[Realtime] Session closed:", {
+        roomId,
+        closedBy: data.closedBy?.id ?? "unknown",
+      });
+    };
+
+    const handleSessionReopened = (data: {
+      roomId: string;
+      reopenedBy?: {
+        id: string;
+        displayName?: string | null;
+      };
+    }) => {
+      if (cancelled) {
+        return;
+      }
+
+      if (!data || data.roomId !== roomId) {
+        return;
+      }
+
+      setRemoteSessionState({
+        roomId,
+        change: {
+          roomId,
+          action: "reopened",
+          userId: data.reopenedBy?.id,
+          displayName: data.reopenedBy?.displayName,
+        },
+      });
+
+      console.info("[Realtime] Session reopened:", {
+        roomId,
+        reopenedBy: data.reopenedBy?.id ?? "unknown",
+      });
+    };
+
     const handleMemberRoleChanged = (change: MemberRoleChange) => {
       if (cancelled) {
         return;
@@ -743,7 +969,15 @@ export function useBoardRealtime(roomId: string | null) {
 
     socket.on("board:changed", handleBoardChanged);
 
+    socket.on("presence:update", handlePresenceUpdate);
+
     socket.on("member:role-changed", handleMemberRoleChanged);
+
+    socket.on("member:removed", handleMemberRemoved);
+
+    socket.on("session:closed", handleSessionClosed);
+
+    socket.on("session:reopened", handleSessionReopened);
 
     /*
      * ======================================================
@@ -783,7 +1017,15 @@ export function useBoardRealtime(roomId: string | null) {
 
       socket.off("board:changed", handleBoardChanged);
 
+      socket.off("presence:update", handlePresenceUpdate);
+
       socket.off("member:role-changed", handleMemberRoleChanged);
+
+      socket.off("member:removed", handleMemberRemoved);
+
+      socket.off("session:closed", handleSessionClosed);
+
+      socket.off("session:reopened", handleSessionReopened);
 
       /*
        * ----------------------------------------------------
@@ -839,6 +1081,14 @@ export function useBoardRealtime(roomId: string | null) {
         current?.roomId === roomId ? null : current,
       );
 
+      setRemoteMemberRemovedState((current) =>
+        current?.roomId === roomId ? null : current,
+      );
+
+      setRemoteSessionState((current) =>
+        current?.roomId === roomId ? null : current,
+      );
+
       setRemoteMemberRoleState((current) =>
         current?.roomId === roomId ? null : current,
       );
@@ -881,12 +1131,16 @@ export function useBoardRealtime(roomId: string | null) {
 
     remoteMemberRoleChange,
 
+    remoteMemberRemoved,
+    remoteSessionChange,
+
     /*
      * Actions
      */
 
     sendCanvasUpdate,
     sendBoardChange,
+    sendMemberRemove,
     sendMemberRoleChange,
   };
 }

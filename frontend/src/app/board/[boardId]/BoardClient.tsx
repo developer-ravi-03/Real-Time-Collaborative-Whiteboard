@@ -146,6 +146,9 @@ export default function BoardClient({ boardId }: BoardClientProps) {
   const [boardDeletedNotification, setBoardDeletedNotification] =
     useState(false);
 
+  const [memberRemovedNotification, setMemberRemovedNotification] =
+    useState(false);
+
   /*
    * ========================================================
    * REALTIME
@@ -155,10 +158,15 @@ export default function BoardClient({ boardId }: BoardClientProps) {
   const {
     status: realtimeStatus,
     roomError: realtimeError,
+
     remoteCanvasUpdate,
     sendCanvasUpdate,
+
     remoteMemberRoleChange,
+
     remoteBoardChange,
+
+    remoteMemberRemoved,
   } = useBoardRealtime(board?.roomId ?? null);
 
   /*
@@ -323,6 +331,32 @@ export default function BoardClient({ boardId }: BoardClientProps) {
       window.clearTimeout(refreshTimer);
     };
   }, [remoteMemberRoleChange, refreshBoard]);
+
+  useEffect(() => {
+    if (!remoteMemberRemoved) {
+      return;
+    }
+
+    /*
+     * kicked=true is sent only to the removed user's socket.
+     */
+    if (!remoteMemberRemoved.kicked) {
+      return;
+    }
+
+    const notificationTimer = window.setTimeout(() => {
+      setMemberRemovedNotification(true);
+    }, 0);
+
+    const redirectTimer = window.setTimeout(() => {
+      router.replace("/dashboard");
+    }, 2200);
+
+    return () => {
+      window.clearTimeout(notificationTimer);
+      window.clearTimeout(redirectTimer);
+    };
+  }, [remoteMemberRemoved, router]);
 
   /*
    * ========================================================
@@ -884,16 +918,74 @@ export default function BoardClient({ boardId }: BoardClientProps) {
   return (
     <main
       className="
-        flex
-        h-screen
-        flex-col
-        overflow-hidden
-        bg-background
-      "
+      flex
+      h-screen
+      flex-col
+      overflow-hidden
+      bg-background
+    "
     >
       {/* ==================================================
-          BOARD DELETED NOTIFICATION
-          ================================================== */}
+        MEMBER REMOVED NOTIFICATION
+        ================================================== */}
+
+      {memberRemovedNotification && (
+        <div
+          className="
+          fixed
+          left-1/2
+          top-6
+          z-50
+          w-[calc(100%-2rem)]
+          max-w-md
+          -translate-x-1/2
+          rounded-xl
+          border
+          border-red-500/30
+          bg-red-950
+          px-4
+          py-3
+          text-white
+          shadow-2xl
+        "
+          role="alert"
+          aria-live="assertive"
+        >
+          <div className="flex items-start gap-3">
+            <div
+              className="
+              mt-0.5
+              flex
+              h-8
+              w-8
+              shrink-0
+              items-center
+              justify-center
+              rounded-full
+              bg-red-500/20
+              text-red-300
+            "
+            >
+              !
+            </div>
+
+            <div className="min-w-0">
+              <p className="text-sm font-semibold">
+                You were removed from this room
+              </p>
+
+              <p className="mt-1 text-xs text-red-100/80">
+                The room owner removed you from this room. Redirecting you to
+                the dashboard...
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================================================
+        BOARD DELETED NOTIFICATION
+        ================================================== */}
 
       {boardDeletedNotification && (
         <div
