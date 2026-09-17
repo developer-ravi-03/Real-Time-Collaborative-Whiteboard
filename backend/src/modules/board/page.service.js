@@ -98,11 +98,17 @@ class PageService {
   }
 
   /* -------------------------------------------------------------------------- */
-  /*                           Get First Page                                   */
+  /*                     Find First Page - Nullable                             */
   /* -------------------------------------------------------------------------- */
 
-  async getFirstPage(boardId) {
-    const page = await db.boardPage.findFirst({
+  /*
+   * Used when a page is optional.
+   *
+   * Returns null when the board does not have a page.
+   */
+
+  async findFirstPage(boardId) {
+    return await db.boardPage.findFirst({
       where: {
         boardId,
       },
@@ -111,6 +117,20 @@ class PageService {
         pageNumber: "asc",
       },
     });
+  }
+
+  /* -------------------------------------------------------------------------- */
+  /*                           Get First Page                                   */
+  /* -------------------------------------------------------------------------- */
+
+  /*
+   * Use this method when a page is REQUIRED.
+   *
+   * Existing behavior remains unchanged.
+   */
+
+  async getFirstPage(boardId) {
+    const page = await this.findFirstPage(boardId);
 
     if (!page) {
       throw new ApiError(404, "No page found.");
@@ -215,6 +235,7 @@ class PageService {
         where: {
           boardId: page.boardId,
         },
+
         orderBy: {
           pageNumber: "asc",
         },
@@ -225,6 +246,7 @@ class PageService {
           where: {
             id: remainingPages[index].id,
           },
+
           data: {
             pageNumber: index + 1,
           },

@@ -47,15 +47,10 @@ class BoardService {
       const board = await tx.board.create({
         data: {
           roomId,
-
           createdById: userId,
-
           name: boardData.name,
-
           description: boardData.description,
-
           type: boardData.type,
-
           settings: this.getDefaultBoardSettings(boardData.type),
         },
       });
@@ -63,13 +58,9 @@ class BoardService {
       await tx.boardPage.create({
         data: {
           boardId: board.id,
-
           pageNumber: 1,
-
           title: null,
-
           canvasData: PageService.getDefaultCanvasData(),
-
           version: 1,
         },
       });
@@ -131,11 +122,21 @@ class BoardService {
   }
 
   /* -------------------------------------------------------------------------- */
-  /*                           Get First Board                                  */
+  /*                     Find First Board - Nullable                            */
   /* -------------------------------------------------------------------------- */
 
-  async getFirstBoard(roomId) {
-    const board = await db.board.findFirst({
+  /*
+   * Used when a board is optional.
+   *
+   * IMPORTANT:
+   * This method intentionally returns null when the room
+   * does not have any board.
+   *
+   * It must NOT throw "No board found".
+   */
+
+  async findFirstBoard(roomId) {
+    return await db.board.findFirst({
       where: {
         roomId,
       },
@@ -160,6 +161,21 @@ class BoardService {
         createdAt: "asc",
       },
     });
+  }
+
+  /* -------------------------------------------------------------------------- */
+  /*                           Get First Board                                  */
+  /* -------------------------------------------------------------------------- */
+
+  /*
+   * Use this method when a board is REQUIRED.
+   *
+   * Existing behavior is intentionally preserved so that
+   * existing API consumers do not silently change behavior.
+   */
+
+  async getFirstBoard(roomId) {
+    const board = await this.findFirstBoard(roomId);
 
     if (!board) {
       throw new ApiError(404, "No board found.");
@@ -177,6 +193,7 @@ class BoardService {
       where: {
         id: boardId,
       },
+
       include: {
         room: true,
       },
@@ -184,7 +201,7 @@ class BoardService {
   }
 
   /* -------------------------------------------------------------------------- */
-  /*                           Get Board                                 */
+  /*                           Get Board Details                                */
   /* -------------------------------------------------------------------------- */
 
   async getBoardDetails(boardId) {
@@ -216,6 +233,10 @@ class BoardService {
 
     return board;
   }
+
+  /* -------------------------------------------------------------------------- */
+  /*                         Get Board Initialization                            */
+  /* -------------------------------------------------------------------------- */
 
   async getBoardInitialization(boardId, userId) {
     const board = await db.board.findUnique({
@@ -264,6 +285,7 @@ class BoardService {
           userId,
         },
       },
+
       select: {
         role: true,
       },
@@ -278,6 +300,7 @@ class BoardService {
       yourRole: membership.role,
     };
   }
+
   /* -------------------------------------------------------------------------- */
   /*                              Update Board                                  */
   /* -------------------------------------------------------------------------- */
@@ -294,6 +317,7 @@ class BoardService {
         where: {
           roomId: board.roomId,
           name: boardData.name,
+
           NOT: {
             id: boardId,
           },

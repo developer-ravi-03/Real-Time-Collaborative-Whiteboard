@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth, useUser } from "@clerk/nextjs";
 
 import { apiRequest } from "@/lib/api-client";
@@ -18,6 +19,8 @@ import { Navbar } from "@/components/common/navbar";
 export default function DashboardClient() {
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const { user } = useUser();
+
+  const router = useRouter();
 
   const [rooms, setRooms] = useState<Room[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,12 +50,10 @@ export default function DashboardClient() {
     let cancelled = false;
 
     const initializeDashboard = async () => {
-      // Clerk hasn't finished loading
       if (!isLoaded) {
         return;
       }
 
-      // User is not signed in
       if (!isSignedIn) {
         setLoading(false);
         return;
@@ -66,7 +67,9 @@ export default function DashboardClient() {
 
         // Wait for Clerk token
         for (let attempt = 0; attempt < 10; attempt++) {
-          if (cancelled) return;
+          if (cancelled) {
+            return;
+          }
 
           token = await getToken({
             skipCache: true,
@@ -83,9 +86,10 @@ export default function DashboardClient() {
           throw new Error("Authentication session could not be initialized.");
         }
 
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
 
-        // Now token is definitely available
         const response = await apiRequest<ApiResponse<Room[]>>(
           getToken,
           "/rooms/my",
@@ -95,7 +99,9 @@ export default function DashboardClient() {
           setRooms(response.data);
         }
       } catch (error) {
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
 
         console.error("Failed to initialize dashboard:", error);
 
@@ -109,7 +115,7 @@ export default function DashboardClient() {
       }
     };
 
-    initializeDashboard();
+    void initializeDashboard();
 
     return () => {
       cancelled = true;
@@ -130,7 +136,25 @@ export default function DashboardClient() {
       setCreating(true);
       setCreateError(null);
 
-      await apiRequest(getToken, "/rooms", {
+      /*
+       * Backend returns the newly created room directly:
+       *
+       * {
+       *   success: true,
+       *   message: "Room created successfully.",
+       *   data: {
+       *     id: "...",
+       *     ...
+       *   }
+       * }
+       *
+       * We only need the room ID for navigation.
+       */
+      const response = await apiRequest<
+        ApiResponse<{
+          id: string;
+        }>
+      >(getToken, "/rooms", {
         method: "POST",
         body: JSON.stringify({
           name: roomName.trim(),
@@ -139,18 +163,27 @@ export default function DashboardClient() {
         }),
       });
 
-      const response = await apiRequest<ApiResponse<Room[]>>(
-        getToken,
-        "/rooms/my",
-      );
+      const createdRoomId = response.data.id;
 
-      setRooms(response.data);
-
+      /*
+       * Reset modal state before navigation.
+       */
       setRoomName("");
       setRoomDescription("");
       setRoomVisibility("PRIVATE");
+      setCreateError(null);
       setShowCreateRoom(false);
+
+      /*
+       * Newly created room already contains the owner
+       * as a room member on the backend.
+       *
+       * Enter the room directly.
+       */
+      router.push(`/room/${createdRoomId}`);
     } catch (error) {
+      console.error("Failed to create room:", error);
+
       setCreateError(
         error instanceof Error ? error.message : "Failed to create room.",
       );
@@ -175,23 +208,40 @@ export default function DashboardClient() {
       setJoining(true);
       setJoinError(null);
 
-      await apiRequest(getToken, "/rooms/join", {
+      /*
+       * Backend joins the current user and returns
+       * the joined room.
+       */
+      const response = await apiRequest<
+        ApiResponse<{
+          room: {
+            id: string;
+          };
+          yourRole?: string;
+        }>
+      >(getToken, "/rooms/join", {
         method: "POST",
         body: JSON.stringify({
           roomCode: code,
         }),
       });
 
-      const response = await apiRequest<ApiResponse<Room[]>>(
-        getToken,
-        "/rooms/my",
-      );
+      const joinedRoomId = response.data.room.id;
 
-      setRooms(response.data);
-
+      /*
+       * Reset modal state before navigation.
+       */
       setRoomCode("");
+      setJoinError(null);
       setShowJoinRoom(false);
+
+      /*
+       * Enter the room immediately.
+       */
+      router.push(`/room/${joinedRoomId}`);
     } catch (error) {
+      console.error("Failed to join room:", error);
+
       setJoinError(
         error instanceof Error ? error.message : "Unable to join room.",
       );
@@ -207,10 +257,10 @@ export default function DashboardClient() {
   return (
     <>
       <Navbar />
+
       <main>
         <section className="mx-auto max-w-7xl px-6 py-10 sm:px-8">
           <DashboardHeader
-            // firstName={user?.firstName}
             firstName={user?.firstName ?? undefined}
             onCreateRoom={() => {
               setCreateError(null);

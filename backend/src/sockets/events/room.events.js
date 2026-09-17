@@ -98,47 +98,46 @@ export default function registerRoomEvents(io, socket) {
 
       const users = getUsers(roomId);
 
-      /* ---------------------------------------------------------------------- */
-      /*                         Initial Board/Page                              */
-      /* ---------------------------------------------------------------------- */
-
-      const board = await BoardService.getFirstBoard(roomId);
-
-      if (!board) {
-        await socket.leave(roomId);
-        removeUser(roomId, socket.id);
-        socket.currentRoomId = null;
-
-        return callback({
-          success: false,
-          message: "Room does not have a board.",
-        });
-      }
-
-      const page = await PageService.getFirstPage(board.id);
-
-      if (!page) {
-        await socket.leave(roomId);
-        removeUser(roomId, socket.id);
-        socket.currentRoomId = null;
-
-        return callback({
-          success: false,
-          message: "Board does not have a page.",
-        });
-      }
-
-      /* ---------------------------------------------------------------------- */
-      /*                        Initial Canvas                                    */
-      /* ---------------------------------------------------------------------- */
-
-      emitCanvasInitialization(socket, board, page);
-
-      /* ---------------------------------------------------------------------- */
-      /*                       Presence Broadcast                                */
-      /* ---------------------------------------------------------------------- */
-
       io.to(roomId).emit(SOCKET_EVENTS.PRESENCE_UPDATE, users);
+
+      /* ---------------------------------------------------------------------- */
+      /*                     OPTIONAL BOARD INITIALIZATION                      */
+      /* ---------------------------------------------------------------------- */
+
+      /*
+       * IMPORTANT:
+       *
+       * Room membership does NOT require a board.
+       *
+       * A newly created room can legitimately have:
+       *
+       *     boards = []
+       *
+       * Therefore we use findFirstBoard(), which returns
+       * null instead of throwing when no board exists.
+       */
+
+      const board = await BoardService.findFirstBoard(roomId);
+
+      if (board) {
+        /*
+         * Same rule for pages.
+         *
+         * A board normally gets its first page during board
+         * creation, but room joining must remain resilient
+         * even if a page is temporarily unavailable.
+         */
+
+        const page = await PageService.findFirstPage(board.id);
+
+        if (page) {
+          emitCanvasInitialization(socket, board, page);
+        } else {
+          console.info(`[Socket] Board ${board.id} has no page yet.`);
+        }
+      } else {
+        console.info(`[Socket] Room ${roomId} has no board yet.`);
+      }
 
       /* ---------------------------------------------------------------------- */
       /*                              Success                                    */
@@ -150,7 +149,7 @@ export default function registerRoomEvents(io, socket) {
         users,
       });
     } catch (error) {
-      console.error(`[Socket] Failed to join room:`, error);
+      console.error("[Socket] Failed to join room:", error);
 
       return callback({
         success: false,
@@ -159,6 +158,10 @@ export default function registerRoomEvents(io, socket) {
       });
     }
   });
+
+  /* ------------------------------------------------------------------------ */
+  /*                              ROOM LEAVE                                  */
+  /* ------------------------------------------------------------------------ */
 
   socket.on(SOCKET_EVENTS.ROOM_LEAVE, async (_data, callback) => {
     try {
@@ -190,7 +193,7 @@ export default function registerRoomEvents(io, socket) {
         message: "Left room successfully.",
       });
     } catch (error) {
-      console.error(`[Socket] Failed to leave room:`, error);
+      console.error("[Socket] Failed to leave room:", error);
 
       return callback({
         success: false,
@@ -199,6 +202,10 @@ export default function registerRoomEvents(io, socket) {
       });
     }
   });
+
+  /* ------------------------------------------------------------------------ */
+  /*                            PRESENCE GET                                  */
+  /* ------------------------------------------------------------------------ */
 
   socket.on(SOCKET_EVENTS.PRESENCE_GET, (callback) => {
     if (typeof callback !== "function") {
