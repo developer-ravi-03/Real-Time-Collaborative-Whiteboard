@@ -6,6 +6,8 @@ import { useAuth } from "@clerk/nextjs";
 
 import type { Board, CurrentPage } from "@/types/board";
 
+import type { CanvasRealtimeUpdate } from "@/hooks/useBoardRealtime";
+
 import type { CanvasTool } from "./canvas.types";
 
 import { InfiniteCanvas } from "./InfiniteCanvas";
@@ -33,6 +35,27 @@ type CanvasWorkspaceProps = {
   currentPage: CurrentPage | null;
 
   canEdit: boolean;
+
+  /*
+   * Latest canvas state received from another
+   * connected collaborator.
+   *
+   * BoardClient owns the socket connection.
+   * CanvasWorkspace only routes the update
+   * to the active canvas.
+   */
+  remoteCanvasUpdate?: CanvasRealtimeUpdate | null;
+
+  /*
+   * Sends a local canvas mutation to Socket.IO.
+   *
+   * Persistence remains handled separately by
+   * useCanvasPersistence.
+   */
+  onCanvasRealtimeUpdate?: (
+    pageId: string,
+    canvasData: Record<string, unknown>,
+  ) => void;
 };
 
 type HistoryState = {
@@ -74,10 +97,18 @@ function SaveStatus({
 
   onRetry: () => void;
 }) {
+  /*
+   * ========================================================
+   * SAVED
+   * ========================================================
+   */
+
   if (status === "saved") {
     return (
       <div
         className="
+          pointer-events-none
+
           rounded-lg
           border
           border-border
@@ -89,20 +120,37 @@ function SaveStatus({
 
           text-xs
           font-medium
+          text-foreground
 
           shadow-lg
+          backdrop-blur
         "
       >
-        <span className="mr-1.5 text-emerald-500">✓</span>
+        <span
+          className="
+            mr-1.5
+            text-emerald-500
+          "
+        >
+          ✓
+        </span>
         Saved just now
       </div>
     );
   }
 
+  /*
+   * ========================================================
+   * SAVING
+   * ========================================================
+   */
+
   if (status === "saving") {
     return (
       <div
         className="
+          pointer-events-none
+
           rounded-lg
           border
           border-border
@@ -118,12 +166,19 @@ function SaveStatus({
           text-muted-foreground
 
           shadow-lg
+          backdrop-blur
         "
       >
         Saving...
       </div>
     );
   }
+
+  /*
+   * ========================================================
+   * SAVE ERROR
+   * ========================================================
+   */
 
   if (status === "error") {
     return (
@@ -148,6 +203,7 @@ function SaveStatus({
           text-destructive
 
           shadow-lg
+          backdrop-blur
         "
       >
         <span>⚠ Save failed</span>
@@ -156,6 +212,8 @@ function SaveStatus({
           type="button"
           onClick={onRetry}
           className="
+            pointer-events-auto
+
             rounded
             px-1.5
             py-0.5
@@ -172,10 +230,18 @@ function SaveStatus({
     );
   }
 
+  /*
+   * ========================================================
+   * UNSAVED
+   * ========================================================
+   */
+
   if (status === "unsaved" || isDirty) {
     return (
       <div
         className="
+          pointer-events-none
+
           rounded-lg
           border
           border-border
@@ -191,6 +257,7 @@ function SaveStatus({
           text-muted-foreground
 
           shadow-lg
+          backdrop-blur
         "
       >
         Unsaved changes
@@ -211,6 +278,8 @@ export function CanvasWorkspace({
   board,
   currentPage,
   canEdit,
+  remoteCanvasUpdate,
+  onCanvasRealtimeUpdate,
 }: CanvasWorkspaceProps) {
   /*
    * ========================================================
@@ -222,7 +291,7 @@ export function CanvasWorkspace({
 
   /*
    * ========================================================
-   * TOOL
+   * TOOL STATE
    * ========================================================
    */
 
@@ -238,13 +307,12 @@ export function CanvasWorkspace({
 
   const [historyState, setHistoryState] = useState<HistoryState>({
     canUndo: false,
-
     canRedo: false,
   });
 
   /*
    * ========================================================
-   * INFINITE ACTIONS
+   * INFINITE HISTORY ACTIONS
    * ========================================================
    */
 
@@ -262,7 +330,7 @@ export function CanvasWorkspace({
 
   /*
    * ========================================================
-   * SLIDE ACTIONS
+   * SLIDE HISTORY ACTIONS
    * ========================================================
    */
 
@@ -282,6 +350,12 @@ export function CanvasWorkspace({
    * ========================================================
    * PERSISTENCE
    * ========================================================
+   *
+   * REST autosave remains responsible for
+   * PostgreSQL persistence.
+   *
+   * Socket.IO is responsible for live
+   * collaboration only.
    */
 
   const persistence = useCanvasPersistence({
@@ -291,6 +365,10 @@ export function CanvasWorkspace({
 
     enabled: canEdit && isLoaded && Boolean(isSignedIn),
   });
+
+  const { markDirty } = persistence;
+
+  const currentPageId = currentPage?.id ?? null;
 
   /*
    * ========================================================
@@ -328,19 +406,65 @@ export function CanvasWorkspace({
 
   /*
    * ========================================================
-   * CANVAS CHANGE
+   * LOCAL CANVAS CHANGE
    * ========================================================
+   *
+   * One local mutation has TWO destinations:
+   *
+   *     1. REST autosave
+   *     2. Socket.IO realtime
+   *
+   * They are intentionally kept separate.
    */
 
   const handleCanvasChange = useCallback(
     (data: Record<string, unknown>) => {
-      if (!canEdit || !isLoaded || !isSignedIn) {
+      /*
+       * --------------------------------------------------
+       * Viewer cannot modify canvas.
+       * --------------------------------------------------
+       */
+
+      if (!canEdit) {
         return;
       }
 
-      persistence.markDirty(data);
+      /*
+       * --------------------------------------------------
+       * Wait for authentication.
+       * --------------------------------------------------
+       */
+
+      if (!isLoaded || !isSignedIn) {
+        return;
+      }
+
+      /*
+       * --------------------------------------------------
+       * REST persistence
+       * --------------------------------------------------
+       */
+
+      markDirty(data);
+
+      /*
+       * --------------------------------------------------
+       * Realtime synchronization
+       * --------------------------------------------------
+       */
+
+      if (currentPageId && onCanvasRealtimeUpdate) {
+        onCanvasRealtimeUpdate(currentPageId, data);
+      }
     },
-    [canEdit, isLoaded, isSignedIn, persistence.markDirty],
+    [
+      canEdit,
+      isLoaded,
+      isSignedIn,
+      markDirty,
+      currentPageId,
+      onCanvasRealtimeUpdate,
+    ],
   );
 
   /*
@@ -355,11 +479,16 @@ export function CanvasWorkspace({
         return;
       }
 
+      /*
+       * Choose the image insertion action
+       * belonging to the active canvas.
+       */
+
       const action =
         board.type === "SLIDES" ? slideAddImageAction : infiniteAddImageAction;
 
       if (!action) {
-        console.warn("Image action is not ready yet.");
+        console.warn("[CanvasWorkspace] Image action is not ready yet.");
 
         return;
       }
@@ -368,13 +497,13 @@ export function CanvasWorkspace({
         await action(file);
 
         /*
-         * Image is an insertion action,
-         * not a persistent tool mode.
+         * Image insertion is an action,
+         * not a persistent drawing tool.
          */
 
         setActiveTool("select");
       } catch (error) {
-        console.error("Failed to add image:", error);
+        console.error("[CanvasWorkspace] Failed to add image:", error);
 
         const message =
           error instanceof Error ? error.message : "Failed to add image.";
@@ -389,6 +518,12 @@ export function CanvasWorkspace({
    * ========================================================
    * PASTE IMAGE
    * ========================================================
+   *
+   * Supports:
+   *
+   *     Ctrl/Cmd + V
+   *
+   * when clipboard contains an image.
    */
 
   useEffect(() => {
@@ -404,6 +539,10 @@ export function CanvasWorkspace({
       }
 
       for (const item of items) {
+        /*
+         * Ignore normal text.
+         */
+
         if (!item.type.startsWith("image/")) {
           continue;
         }
@@ -434,7 +573,7 @@ export function CanvasWorkspace({
    * KEYBOARD TOOL SHORTCUTS
    * ========================================================
    *
-   * Infinite:
+   * INFINITE:
    *
    * V = Select
    * H = Hand
@@ -445,7 +584,7 @@ export function CanvasWorkspace({
    * L = Line
    * T = Text
    *
-   * Slide:
+   * SLIDES:
    *
    * V = Select
    * P = Pen
@@ -454,6 +593,8 @@ export function CanvasWorkspace({
    * C = Circle
    * L = Line
    * T = Text
+   *
+   * Hand is ignored on Slides.
    */
 
   useEffect(() => {
@@ -465,8 +606,8 @@ export function CanvasWorkspace({
       const target = event.target as HTMLElement | null;
 
       /*
-       * Never change tool while
-       * typing.
+       * Never change tools while
+       * the user is typing.
        */
 
       if (
@@ -478,13 +619,17 @@ export function CanvasWorkspace({
       }
 
       /*
-       * Do not handle
-       * Ctrl/Cmd shortcuts.
+       * Ctrl/Cmd combinations belong
+       * to history/browser shortcuts.
        */
 
       if (event.ctrlKey || event.metaKey) {
         return;
       }
+
+      /*
+       * Ignore repeated key events.
+       */
 
       if (event.repeat) {
         return;
@@ -493,52 +638,95 @@ export function CanvasWorkspace({
       let nextTool: CanvasTool | null = null;
 
       switch (event.key.toLowerCase()) {
+        /*
+         * ----------------------------------------------
+         * SELECT
+         * ----------------------------------------------
+         */
+
         case "v":
           nextTool = "select";
 
           break;
 
-        case "h":
-          /*
-           * Hand belongs only
-           * to Infinite Canvas.
-           */
+        /*
+         * ----------------------------------------------
+         * HAND
+         * ----------------------------------------------
+         */
 
+        case "h":
           if (board.type === "INFINITE") {
             nextTool = "hand";
           }
 
           break;
 
+        /*
+         * ----------------------------------------------
+         * PEN
+         * ----------------------------------------------
+         */
+
         case "p":
           nextTool = "pen";
 
           break;
 
+        /*
+         * ----------------------------------------------
+         * ERASER
+         * ----------------------------------------------
+         */
+
         case "e":
           /*
-           * Eraser is available
-           * on BOTH canvases.
+           * Both Infinite and Slide
+           * support eraser.
            */
 
           nextTool = "eraser";
 
           break;
 
+        /*
+         * ----------------------------------------------
+         * RECTANGLE
+         * ----------------------------------------------
+         */
+
         case "r":
           nextTool = "rectangle";
 
           break;
+
+        /*
+         * ----------------------------------------------
+         * CIRCLE
+         * ----------------------------------------------
+         */
 
         case "c":
           nextTool = "circle";
 
           break;
 
+        /*
+         * ----------------------------------------------
+         * LINE
+         * ----------------------------------------------
+         */
+
         case "l":
           nextTool = "line";
 
           break;
+
+        /*
+         * ----------------------------------------------
+         * TEXT
+         * ----------------------------------------------
+         */
 
         case "t":
           nextTool = "text";
@@ -548,6 +736,10 @@ export function CanvasWorkspace({
         default:
           return;
       }
+
+      /*
+       * Hand on Slides is ignored.
+       */
 
       if (!nextTool) {
         return;
@@ -564,6 +756,40 @@ export function CanvasWorkspace({
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [board.type, canEdit]);
+
+  /*
+   * ========================================================
+   * RESET HISTORY BRIDGES WHEN PAGE CHANGES
+   * ========================================================
+   *
+   * IMPORTANT:
+   *
+   * We do NOT clear these immediately on every page change
+   * because the new canvas registers its actions during its
+   * lifecycle.
+   *
+   * The active action is selected using board type and the
+   * canvas callback.
+   */
+
+  /*
+   * ========================================================
+   * EFFECTIVE TOOL
+   * ========================================================
+   *
+   * Keep activeTool as the user's selected preference.
+   * Unsupported/forbidden tools are derived instead of
+   * synchronously changing React state inside an effect.
+   *
+   * This avoids React 19's set-state-in-effect lint error
+   * and prevents an unnecessary render cycle.
+   */
+
+  const effectiveActiveTool: CanvasTool = !canEdit
+    ? "select"
+    : board.type === "SLIDES" && activeTool === "hand"
+      ? "select"
+      : activeTool;
 
   /*
    * ========================================================
@@ -588,9 +814,21 @@ export function CanvasWorkspace({
         "
       >
         <div className="text-center">
-          <p className="font-medium">No page selected</p>
+          <p
+            className="
+              font-medium
+            "
+          >
+            No page selected
+          </p>
 
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p
+            className="
+              mt-1
+              text-sm
+              text-muted-foreground
+            "
+          >
             Select a page from the sidebar.
           </p>
         </div>
@@ -600,7 +838,7 @@ export function CanvasWorkspace({
 
   /*
    * ========================================================
-   * ACTIVE HISTORY ACTION
+   * ACTIVE HISTORY ACTIONS
    * ========================================================
    */
 
@@ -609,6 +847,25 @@ export function CanvasWorkspace({
 
   const activeRedoAction =
     board.type === "INFINITE" ? infiniteRedoAction : slideRedoAction;
+
+  /*
+   * ========================================================
+   * REMOTE CANVAS UPDATE
+   * ========================================================
+   *
+   * Only pass the remote update to InfiniteCanvas when:
+   *
+   *     1. update exists
+   *     2. update belongs to current page
+   *
+   * This prevents a drawing made on Page 1 from being
+   * accidentally applied to Page 2.
+   */
+
+  const currentRemoteCanvasUpdate =
+    remoteCanvasUpdate && remoteCanvasUpdate.pageId === currentPage.id
+      ? remoteCanvasUpdate
+      : null;
 
   /*
    * ========================================================
@@ -641,11 +898,18 @@ export function CanvasWorkspace({
           pageId={currentPage.id}
           canvasData={currentPage.canvasData}
           canEdit={canEdit}
-          activeTool={activeTool}
+          activeTool={effectiveActiveTool}
           eraserSize={eraserSize}
           onHistoryChange={setHistoryState}
           onHistoryActions={handleInfiniteHistoryActions}
           onCanvasChange={handleCanvasChange}
+          /*
+           * =================================================
+           * REALTIME
+           * =================================================
+           */
+
+          remoteCanvasUpdate={currentRemoteCanvasUpdate}
         />
       )}
 
@@ -657,7 +921,7 @@ export function CanvasWorkspace({
         <SlideCanvas
           canvasData={currentPage.canvasData}
           canEdit={canEdit}
-          activeTool={activeTool}
+          activeTool={effectiveActiveTool}
           onHistoryChange={setHistoryState}
           onHistoryActions={handleSlideHistoryActions}
           onCanvasChange={handleCanvasChange}
@@ -673,6 +937,7 @@ export function CanvasWorkspace({
         onToolChange={setActiveTool}
         eraserSize={eraserSize}
         onEraserSizeChange={setEraserSize}
+        onImageUpload={handleImageUpload}
         canEdit={canEdit}
         canUndo={Boolean(activeUndoAction) && historyState.canUndo}
         canRedo={Boolean(activeRedoAction) && historyState.canRedo}
@@ -690,30 +955,27 @@ export function CanvasWorkspace({
 
           void activeRedoAction();
         }}
-        onImageUpload={handleImageUpload}
         /*
-         * Hand only exists on
-         * Infinite Canvas.
+         * --------------------------------------------------
+         * Tool visibility
+         * --------------------------------------------------
+         *
+         * Hand:
+         * Infinite only
+         *
+         * Eraser:
+         * Both
+         *
+         * Eraser size:
+         * Infinite only
+         *
+         * Image:
+         * Both
          */
 
         showHand={board.type === "INFINITE"}
-        /*
-         * Eraser exists on
-         * both canvases.
-         */
-
         showEraser={true}
-        /*
-         * Slide eraser is
-         * object-based, therefore
-         * no size selector.
-         */
-
         showEraserSize={board.type === "INFINITE"}
-        /*
-         * Image exists on both.
-         */
-
         showImage={true}
       />
 

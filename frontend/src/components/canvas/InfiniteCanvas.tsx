@@ -46,6 +46,18 @@ type InfiniteCanvasProps = {
   onHistoryActions?: (actions: HistoryActions) => void;
 
   onCanvasChange?: (canvasData: Record<string, unknown>) => void;
+
+  /*
+   * Canvas state received from another
+   * collaborator through Socket.IO.
+   */
+  remoteCanvasUpdate?: {
+    pageId: string;
+
+    canvasData: Record<string, unknown>;
+
+    userId?: string;
+  } | null;
 };
 
 /*
@@ -123,6 +135,7 @@ export function InfiniteCanvas({
   onHistoryChange,
   onHistoryActions,
   onCanvasChange,
+  remoteCanvasUpdate,
 }: InfiniteCanvasProps) {
   /*
    * ========================================================
@@ -209,6 +222,8 @@ export function InfiniteCanvas({
   const restoringHistoryRef = useRef(false);
 
   const historyBusyRef = useRef(false);
+
+  const applyingRemoteUpdateRef = useRef(false);
 
   /*
    * ========================================================
@@ -349,7 +364,12 @@ export function InfiniteCanvas({
   const pushHistory = () => {
     const canvas = fabricCanvasRef.current;
 
-    if (!canvas || restoringHistoryRef.current || isInitializingRef.current) {
+    if (
+      !canvas ||
+      restoringHistoryRef.current ||
+      isInitializingRef.current ||
+      applyingRemoteUpdateRef.current
+    ) {
       return;
     }
 
@@ -658,6 +678,120 @@ export function InfiniteCanvas({
 
   /*
    * ========================================================
+   * REMOTE CANVAS UPDATE
+   * ========================================================
+   *
+   * Socket.IO delivers the latest canvas snapshot from
+   * another collaborator. Applying it must never become a
+   * local history entry, autosave operation, or socket event.
+   */
+
+  useEffect(() => {
+    const update = remoteCanvasUpdate;
+
+    if (!update || update.pageId !== pageId) {
+      return;
+    }
+
+    const canvas = fabricCanvasRef.current;
+
+    if (!canvas || canvas.destroyed || canvas.disposed) {
+      return;
+    }
+
+    /* Do not interrupt an active local drawing interaction. */
+    if (
+      isDrawingShapeRef.current ||
+      isPanningRef.current ||
+      isErasingRef.current
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const applyRemoteUpdate = async () => {
+      if (
+        applyingRemoteUpdateRef.current ||
+        canvas.destroyed ||
+        canvas.disposed
+      ) {
+        return;
+      }
+
+      applyingRemoteUpdateRef.current = true;
+      restoringHistoryRef.current = true;
+
+      const previousRenderOnAddRemove = canvas.renderOnAddRemove;
+
+      canvas.renderOnAddRemove = false;
+
+      try {
+        canvas.discardActiveObject();
+
+        /*
+         * IMPORTANT: do not call canvas.clear() here. It creates
+         * a visible blank frame before the remote snapshot loads.
+         */
+        await canvas.loadFromJSON(update.canvasData);
+
+        if (
+          cancelled ||
+          fabricCanvasRef.current !== canvas ||
+          canvas.destroyed ||
+          canvas.disposed
+        ) {
+          return;
+        }
+
+        canvas.getObjects().forEach((object) => {
+          object.set({ erasable: true });
+          object.setCoords();
+
+          if (object.clipPath) {
+            object.clipPath.set({
+              selectable: false,
+              evented: false,
+            });
+            object.clipPath.setCoords();
+          }
+        });
+
+        canvas.discardActiveObject();
+        canvas.requestRenderAll();
+
+        console.info(
+          `[Realtime] Applied canvas update from ${
+            update.userId ?? "another user"
+          }`,
+        );
+      } catch (error) {
+        if (!cancelled) {
+          console.error(
+            "[Realtime] Failed to apply remote canvas update:",
+            error,
+          );
+        }
+      } finally {
+        if (!canvas.destroyed && !canvas.disposed) {
+          canvas.renderOnAddRemove = previousRenderOnAddRemove;
+          canvas.requestRenderAll();
+        }
+
+        restoringHistoryRef.current = false;
+        applyingRemoteUpdateRef.current = false;
+      }
+    };
+
+    void applyRemoteUpdate();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [remoteCanvasUpdate, pageId]);
+
+  /*
+   * ========================================================
    * FABRIC INITIALIZATION
    * ========================================================
    */
@@ -673,11 +807,7 @@ export function InfiniteCanvas({
 
     let cancelled = false;
 
-    /*
-     * ------------------------------------------------------
-     * CREATE FABRIC CANVAS
-     * ------------------------------------------------------
-     */
+    element.setAttribute("aria-label", "Infinite collaborative canvas");
 
     const canvas = new Canvas(element, {
       selection: canEditRef.current,
@@ -727,9 +857,11 @@ export function InfiniteCanvas({
     const interactionElement = canvas.upperCanvasEl;
 
     if (!interactionElement) {
-      canvas.dispose();
-
       isInitializingRef.current = false;
+
+      void canvas.dispose().catch((error) => {
+        console.error("Failed to dispose Fabric canvas:", error);
+      });
 
       return;
     }
@@ -1728,7 +1860,11 @@ export function InfiniteCanvas({
      */
 
     const handlePathCreated = () => {
-      if (restoringHistoryRef.current || isInitializingRef.current) {
+      if (
+        restoringHistoryRef.current ||
+        isInitializingRef.current ||
+        applyingRemoteUpdateRef.current
+      ) {
         return;
       }
 
@@ -1756,7 +1892,11 @@ export function InfiniteCanvas({
      */
 
     const handleObjectModified = () => {
-      if (restoringHistoryRef.current || isInitializingRef.current) {
+      if (
+        restoringHistoryRef.current ||
+        isInitializingRef.current ||
+        applyingRemoteUpdateRef.current
+      ) {
         return;
       }
 
@@ -2326,11 +2466,13 @@ export function InfiniteCanvas({
     >
       <canvas
         ref={canvasElementRef}
+        aria-label="Infinite collaborative canvas"
         className="
-          absolute
-          inset-0
-          block
-        "
+        absolute
+        inset-0
+        h-full
+        w-full
+      "
       />
 
       {/* ====================================================

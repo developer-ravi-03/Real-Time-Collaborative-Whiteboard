@@ -37,7 +37,7 @@ export default function AIMock() {
           <div className="mb-4 flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-violet-500" />
 
-            <h4 className="font-semibold">Today's Summary</h4>
+            <h4 className="font-semibold">Todays Summary</h4>
           </div>
 
           <ul className="space-y-3 text-sm">

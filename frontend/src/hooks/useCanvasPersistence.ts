@@ -2,10 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import {
-  saveCanvas,
-  type GetToken,
-} from "@/lib/api-client";
+import { saveCanvas, type GetToken } from "@/lib/api-client";
+
+/*
+ * ==========================================================
+ * TYPES
+ * ==========================================================
+ */
 
 export type CanvasSaveStatus =
   | "idle"
@@ -23,11 +26,26 @@ type UseCanvasPersistenceOptions = {
 
   enabled?: boolean;
 
-  onSaved?: (page: {
-    version: number;
-    updatedAt: string;
-  }) => void;
+  onSaved?: (page: { version: number; updatedAt: string }) => void;
 };
+
+/*
+ * ==========================================================
+ * SAVE FUNCTION TYPE
+ * ==========================================================
+ */
+
+type PerformSave = (
+  targetPageId?: string | null,
+  targetCanvasData?: Record<string, unknown> | null,
+  targetVersion?: number,
+) => Promise<void>;
+
+/*
+ * ==========================================================
+ * HOOK
+ * ==========================================================
+ */
 
 export function useCanvasPersistence({
   pageId,
@@ -37,9 +55,9 @@ export function useCanvasPersistence({
   onSaved,
 }: UseCanvasPersistenceOptions) {
   /*
-   * ==========================================================
+   * ========================================================
    * UI STATE
-   * ==========================================================
+   * ========================================================
    */
 
   const [status, setStatus] = useState<CanvasSaveStatus>(
@@ -49,118 +67,144 @@ export function useCanvasPersistence({
   const [isDirty, setIsDirty] = useState(false);
 
   /*
-   * ==========================================================
+   * ========================================================
    * PAGE REFERENCE
-   * ==========================================================
+   * ========================================================
+   *
+   * This tracks which page is currently active.
+   *
+   * It is intentionally a ref because changing the active
+   * page must not itself cause another render.
    */
 
   const activePageIdRef = useRef<string | null>(pageId);
 
   /*
-   * ==========================================================
+   * ========================================================
    * PENDING SAVE
-   * ==========================================================
+   * ========================================================
    *
-   * These refs always contain the latest canvas snapshot that
-   * still needs to be persisted.
+   * These refs contain the latest canvas snapshot that still
+   * needs to be persisted.
    */
 
-  const pendingPageIdRef =
-    useRef<string | null>(null);
+  const pendingPageIdRef = useRef<string | null>(null);
 
-  const pendingCanvasDataRef =
-    useRef<Record<string, unknown> | null>(null);
+  const pendingCanvasDataRef = useRef<Record<string, unknown> | null>(null);
 
   /*
+   * ========================================================
+   * CHANGE VERSION
+   * ========================================================
+   *
    * Every canvas mutation gets a new version.
    *
-   * This prevents an older request from incorrectly marking
-   * newer unsaved changes as saved.
+   * This prevents an older save request from marking newer
+   * changes as saved.
    */
 
   const changeVersionRef = useRef(0);
 
   /*
-   * ==========================================================
+   * ========================================================
    * SAVE CONTROL
-   * ==========================================================
+   * ========================================================
    */
 
   const saveInProgressRef = useRef(false);
 
   const saveQueuedRef = useRef(false);
 
-  const debounceTimerRef =
-    useRef<ReturnType<typeof setTimeout> | null>(null);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /*
-   * ==========================================================
+   * ========================================================
+   * PERFORM SAVE REF
+   * ========================================================
+   *
+   * We keep the latest performSave function in a ref so that
+   * performSave can trigger another save after a previous
+   * request completes without recursively referencing itself
+   * inside useCallback.
+   *
+   * This also keeps React Compiler happy.
+   */
+
+  const performSaveRef = useRef<PerformSave | null>(null);
+
+  /*
+   * ========================================================
    * CLEAR DEBOUNCE TIMER
-   * ==========================================================
+   * ========================================================
    */
 
   const clearDebounceTimer = useCallback(() => {
-    if (!debounceTimerRef.current) {
+    const timer = debounceTimerRef.current;
+
+    if (timer === null) {
       return;
     }
 
-    clearTimeout(debounceTimerRef.current);
+    clearTimeout(timer);
 
     debounceTimerRef.current = null;
   }, []);
 
   /*
-   * ==========================================================
+   * ========================================================
    * PERFORM SAVE
-   * ==========================================================
+   * ========================================================
    *
-   * targetPageId + targetCanvasData are intentionally passed
-   * as snapshots.
+   * Responsibilities:
    *
-   * This is important when:
-   *
-   *     Page A is saving
-   *          ↓
-   *     user switches to Page B
-   *          ↓
-   *     Page B starts changing
-   *
-   * Page A must never accidentally receive Page B's data.
+   * 1. Persist the requested snapshot.
+   * 2. Protect newer changes from older requests.
+   * 3. Queue a latest save if a mutation occurs while the
+   *    current request is still running.
    */
 
-  const performSave = useCallback(
-    async (
-      targetPageId?: string | null,
-      targetCanvasData?: Record<string, unknown> | null,
-      targetVersion?: number,
-    ) => {
+  const performSave = useCallback<PerformSave>(
+    async (targetPageId, targetCanvasData, targetVersion) => {
+      /*
+       * ------------------------------------------------------
+       * Persistence disabled
+       * ------------------------------------------------------
+       */
+
       if (!enabled) {
         return;
       }
 
-      const pageIdToSave =
-        targetPageId ??
-        pendingPageIdRef.current;
+      /*
+       * ------------------------------------------------------
+       * Resolve save snapshot
+       * ------------------------------------------------------
+       */
 
-      const canvasDataToSave =
-        targetCanvasData ??
-        pendingCanvasDataRef.current;
+      const pageIdToSave = targetPageId ?? pendingPageIdRef.current;
 
-      const versionToSave =
-        targetVersion ??
-        changeVersionRef.current;
+      const canvasDataToSave = targetCanvasData ?? pendingCanvasDataRef.current;
 
-      if (
-        !pageIdToSave ||
-        !canvasDataToSave
-      ) {
+      const versionToSave = targetVersion ?? changeVersionRef.current;
+
+      /*
+       * ------------------------------------------------------
+       * Nothing to save
+       * ------------------------------------------------------
+       */
+
+      if (!pageIdToSave || !canvasDataToSave) {
         return;
       }
 
       /*
-       * Another save is already running.
+       * ------------------------------------------------------
+       * Existing save in progress
+       * ------------------------------------------------------
        *
-       * The latest pending snapshot will be saved after
+       * Do not start multiple requests simultaneously.
+       *
+       * The latest pending snapshot will be picked up after
        * the current request finishes.
        */
 
@@ -170,13 +214,32 @@ export function useCanvasPersistence({
         return;
       }
 
+      /*
+       * ------------------------------------------------------
+       * Start save
+       * ------------------------------------------------------
+       */
+
       saveInProgressRef.current = true;
 
       saveQueuedRef.current = false;
 
-      setStatus("saving");
+      /*
+       * We only show "saving" when this page is still the
+       * active page.
+       */
+
+      if (activePageIdRef.current === pageIdToSave) {
+        setStatus("saving");
+      }
 
       try {
+        /*
+         * ----------------------------------------------------
+         * REST API
+         * ----------------------------------------------------
+         */
+
         const response = await saveCanvas(
           getToken,
           pageIdToSave,
@@ -184,94 +247,113 @@ export function useCanvasPersistence({
         );
 
         /*
-         * Only clear dirty state if this request represents
-         * the latest change for the same page.
+         * ----------------------------------------------------
+         * Check whether this request is still latest
+         * ----------------------------------------------------
          */
 
         const isLatestChange =
-          changeVersionRef.current ===
-            versionToSave &&
-          pendingPageIdRef.current ===
-            pageIdToSave;
+          changeVersionRef.current === versionToSave &&
+          pendingPageIdRef.current === pageIdToSave;
 
-        const isCurrentPage =
-          activePageIdRef.current ===
-          pageIdToSave;
+        const isCurrentPage = activePageIdRef.current === pageIdToSave;
+
+        /*
+         * ----------------------------------------------------
+         * Clear pending snapshot only when this request
+         * represents the latest change.
+         * ----------------------------------------------------
+         */
 
         if (isLatestChange) {
           pendingPageIdRef.current = null;
 
           pendingCanvasDataRef.current = null;
 
-          setIsDirty(false);
+          if (isCurrentPage) {
+            setIsDirty(false);
+          }
         }
 
         /*
-         * Do not let a save belonging to an old page modify
-         * the status of the currently visible page.
+         * ----------------------------------------------------
+         * Update UI status only for current page.
+         * ----------------------------------------------------
          */
 
-        if (
-          isLatestChange &&
-          isCurrentPage
-        ) {
+        if (isLatestChange && isCurrentPage) {
           setStatus("saved");
         }
+
+        /*
+         * ----------------------------------------------------
+         * Notify parent about successful save.
+         * ----------------------------------------------------
+         */
 
         onSaved?.({
           version: response.data.version,
           updatedAt: response.data.updatedAt,
         });
       } catch (error) {
-        console.error(
-          "Failed to save canvas:",
-          error,
-        );
+        console.error("Failed to save canvas:", error);
 
         /*
-         * Only show the error if this request is still
-         * relevant to the current pending change.
+         * ----------------------------------------------------
+         * Check whether this failed request is still relevant.
+         * ----------------------------------------------------
          */
 
         const isLatestChange =
-          changeVersionRef.current ===
-            versionToSave &&
-          pendingPageIdRef.current ===
-            pageIdToSave;
+          changeVersionRef.current === versionToSave &&
+          pendingPageIdRef.current === pageIdToSave;
 
-        const isCurrentPage =
-          activePageIdRef.current ===
-          pageIdToSave;
+        const isCurrentPage = activePageIdRef.current === pageIdToSave;
 
-        if (
-          isLatestChange &&
-          isCurrentPage
-        ) {
+        /*
+         * ----------------------------------------------------
+         * Only show error for the currently active page and
+         * latest pending change.
+         * ----------------------------------------------------
+         */
+
+        if (isLatestChange && isCurrentPage) {
           setStatus("error");
 
           setIsDirty(true);
         }
       } finally {
+        /*
+         * ----------------------------------------------------
+         * Current request finished.
+         * ----------------------------------------------------
+         */
+
         saveInProgressRef.current = false;
 
         /*
-         * If another canvas mutation happened while the
-         * request was running, immediately save the latest
-         * snapshot.
+         * ----------------------------------------------------
+         * Check whether another change arrived while saving.
+         * ----------------------------------------------------
          */
 
         const hasPendingChanges =
           pendingPageIdRef.current !== null &&
           pendingCanvasDataRef.current !== null;
 
-        if (
-          saveQueuedRef.current ||
-          hasPendingChanges
-        ) {
+        if (saveQueuedRef.current || hasPendingChanges) {
           saveQueuedRef.current = false;
 
-          if (hasPendingChanges) {
-            void performSave(
+          /*
+           * Use the latest function from the ref.
+           *
+           * This avoids recursive performSave references.
+           */
+
+          const latestPerformSave = performSaveRef.current;
+
+          if (latestPerformSave && hasPendingChanges) {
+            void latestPerformSave(
               pendingPageIdRef.current,
               pendingCanvasDataRef.current,
               changeVersionRef.current,
@@ -284,179 +366,291 @@ export function useCanvasPersistence({
   );
 
   /*
-   * ==========================================================
+   * ========================================================
+   * KEEP PERFORM SAVE REF IN SYNC
+   * ========================================================
+   */
+
+  useEffect(() => {
+    performSaveRef.current = performSave;
+
+    return () => {
+      if (performSaveRef.current === performSave) {
+        performSaveRef.current = null;
+      }
+    };
+  }, [performSave]);
+
+  /*
+   * ========================================================
    * MARK DIRTY
-   * ==========================================================
+   * ========================================================
+   *
+   * Called whenever the canvas changes.
+   *
+   * It does NOT immediately hit the database.
+   *
+   * Instead:
+   *
+   *     canvas change
+   *          ↓
+   *     pending snapshot
+   *          ↓
+   *     debounce
+   *          ↓
+   *     REST save
    */
 
   const markDirty = useCallback(
-    (
-      canvasData: Record<string, unknown>,
-    ) => {
+    (canvasData: Record<string, unknown>) => {
+      /*
+       * ------------------------------------------------------
+       * Guard
+       * ------------------------------------------------------
+       */
+
       if (!enabled || !pageId) {
         return;
       }
 
       /*
-       * Every mutation gets a new version.
+       * ------------------------------------------------------
+       * New canvas mutation
+       * ------------------------------------------------------
        */
 
       changeVersionRef.current += 1;
 
+      const version = changeVersionRef.current;
+
+      /*
+       * ------------------------------------------------------
+       * Store latest snapshot
+       * ------------------------------------------------------
+       */
+
       pendingPageIdRef.current = pageId;
 
-      pendingCanvasDataRef.current =
-        canvasData;
+      pendingCanvasDataRef.current = canvasData;
+
+      /*
+       * ------------------------------------------------------
+       * UI
+       * ------------------------------------------------------
+       */
 
       setIsDirty(true);
 
       setStatus("unsaved");
 
+      /*
+       * ------------------------------------------------------
+       * Reset debounce timer
+       * ------------------------------------------------------
+       */
+
       clearDebounceTimer();
 
-      debounceTimerRef.current =
-        setTimeout(() => {
-          debounceTimerRef.current = null;
+      /*
+       * ------------------------------------------------------
+       * Schedule save
+       * ------------------------------------------------------
+       */
 
-          void performSave(
-            pageId,
-            canvasData,
-            changeVersionRef.current,
-          );
-        }, debounceMs);
+      debounceTimerRef.current = setTimeout(() => {
+        debounceTimerRef.current = null;
+
+        const latestPerformSave = performSaveRef.current;
+
+        if (!latestPerformSave) {
+          return;
+        }
+
+        void latestPerformSave(pageId, canvasData, version);
+      }, debounceMs);
     },
-    [
-      clearDebounceTimer,
-      debounceMs,
-      enabled,
-      pageId,
-      performSave,
-    ],
+    [clearDebounceTimer, debounceMs, enabled, pageId],
   );
 
   /*
-   * ==========================================================
+   * ========================================================
    * FLUSH
-   * ==========================================================
+   * ========================================================
    *
-   * Immediately saves the latest pending canvas.
+   * Immediately saves the latest pending snapshot.
    */
 
   const flush = useCallback(async () => {
     clearDebounceTimer();
 
-    const pendingPageId =
-      pendingPageIdRef.current;
+    const pendingPageId = pendingPageIdRef.current;
 
-    const pendingCanvasData =
-      pendingCanvasDataRef.current;
+    const pendingCanvasData = pendingCanvasDataRef.current;
 
-    const pendingVersion =
-      changeVersionRef.current;
+    const pendingVersion = changeVersionRef.current;
 
-    if (
-      !pendingPageId ||
-      !pendingCanvasData
-    ) {
+    /*
+     * ------------------------------------------------------
+     * Nothing pending
+     * ------------------------------------------------------
+     */
+
+    if (!pendingPageId || !pendingCanvasData) {
       return;
     }
 
-    await performSave(
-      pendingPageId,
-      pendingCanvasData,
-      pendingVersion,
-    );
-  }, [
-    clearDebounceTimer,
-    performSave,
-  ]);
+    /*
+     * ------------------------------------------------------
+     * Use latest save function
+     * ------------------------------------------------------
+     */
+
+    const latestPerformSave = performSaveRef.current;
+
+    if (!latestPerformSave) {
+      return;
+    }
+
+    await latestPerformSave(pendingPageId, pendingCanvasData, pendingVersion);
+  }, [clearDebounceTimer]);
 
   /*
-   * ==========================================================
+   * ========================================================
    * SAVE NOW
-   * ==========================================================
+   * ========================================================
    *
-   * Used by Ctrl/Cmd + S.
+   * Used by:
+   *
+   *     Ctrl + S
+   *     Cmd + S
+   *
+   * It can optionally receive a fresh canvas snapshot.
    */
 
   const saveNow = useCallback(
-    async (
-      canvasData?: Record<string, unknown>,
-    ) => {
-      if (
-        canvasData &&
-        pageId &&
-        enabled
-      ) {
+    async (canvasData?: Record<string, unknown>) => {
+      /*
+       * ------------------------------------------------------
+       * If a snapshot was explicitly provided, make it the
+       * latest pending change before flushing.
+       * ------------------------------------------------------
+       */
+
+      if (canvasData && pageId && enabled) {
         changeVersionRef.current += 1;
 
-        pendingPageIdRef.current =
-          pageId;
+        pendingPageIdRef.current = pageId;
 
-        pendingCanvasDataRef.current =
-          canvasData;
+        pendingCanvasDataRef.current = canvasData;
 
         setIsDirty(true);
 
         setStatus("unsaved");
       }
 
+      /*
+       * ------------------------------------------------------
+       * Immediately persist pending snapshot.
+       * ------------------------------------------------------
+       */
+
       await flush();
     },
-    [
-      enabled,
-      flush,
-      pageId,
-    ],
+    [enabled, flush, pageId],
   );
 
   /*
-   * ==========================================================
+   * ========================================================
    * PAGE CHANGE
-   * ==========================================================
+   * ========================================================
    *
-   * Important:
+   * Scenario:
    *
-   * Before switching pages, capture the old page's pending
-   * data and save it using the OLD page ID.
+   *     Page A
+   *       ↓
+   *     user draws
+   *       ↓
+   *     Page A has pending data
+   *       ↓
+   *     user switches to Page B
+   *
+   * We MUST save Page A using:
+   *
+   *     Page A ID
+   *     Page A canvas data
+   *
+   * before treating Page B as active.
    */
 
   useEffect(() => {
-    const previousPageId =
-      activePageIdRef.current;
+    const previousPageId = activePageIdRef.current;
 
-    if (
-      previousPageId === pageId
-    ) {
+    /*
+     * ------------------------------------------------------
+     * Nothing changed
+     * ------------------------------------------------------
+     */
+
+    if (previousPageId === pageId) {
       return;
     }
+
+    /*
+     * ------------------------------------------------------
+     * Cancel pending debounce
+     * ------------------------------------------------------
+     */
 
     clearDebounceTimer();
 
     /*
-     * Capture old page snapshot before changing the active
-     * page reference.
+     * ------------------------------------------------------
+     * Capture old page snapshot
+     * ------------------------------------------------------
      */
 
-    const oldPageId =
-      pendingPageIdRef.current;
+    const oldPageId = pendingPageIdRef.current;
 
-    const oldCanvasData =
-      pendingCanvasDataRef.current;
+    const oldCanvasData = pendingCanvasDataRef.current;
 
-    const oldVersion =
-      changeVersionRef.current;
+    const oldVersion = changeVersionRef.current;
 
-    if (
-      previousPageId &&
-      oldPageId === previousPageId &&
-      oldCanvasData
-    ) {
+    /*
+     * ------------------------------------------------------
+     * Save old page if it has pending changes
+     * ------------------------------------------------------
+     */
+
+    if (previousPageId && oldPageId === previousPageId && oldCanvasData) {
       /*
-       * Invalidate the old pending state from the current
-       * page's point of view.
+       * Remove it from the global pending queue first.
        *
-       * The actual request still receives the old snapshot.
+       * The request below receives its own immutable
+       * references, so it can continue safely.
+       */
+
+      pendingPageIdRef.current = null;
+
+      pendingCanvasDataRef.current = null;
+
+      /*
+       * The old page is no longer the active page.
+       */
+
+      setIsDirty(false);
+
+      /*
+       * Save the old page snapshot.
+       */
+
+      const latestPerformSave = performSaveRef.current;
+
+      if (latestPerformSave) {
+        void latestPerformSave(previousPageId, oldCanvasData, oldVersion);
+      }
+    } else {
+      /*
+       * No pending changes for previous page.
        */
 
       pendingPageIdRef.current = null;
@@ -464,54 +658,40 @@ export function useCanvasPersistence({
       pendingCanvasDataRef.current = null;
 
       setIsDirty(false);
-
-      void performSave(
-        previousPageId,
-        oldCanvasData,
-        oldVersion,
-      );
-    } else {
-      pendingPageIdRef.current = null;
-
-      pendingCanvasDataRef.current = null;
-
-      setIsDirty(false);
     }
 
     /*
-     * Now switch the active page.
+     * ------------------------------------------------------
+     * Switch active page reference
+     * ------------------------------------------------------
      */
 
     activePageIdRef.current = pageId;
 
     /*
-     * A newly loaded page is already persisted.
-     *
-     * Therefore NEVER show "Unsaved changes" merely because
-     * the page was opened.
+     * ------------------------------------------------------
+     * New page is already persisted on the server.
+     * ------------------------------------------------------
      */
 
-    setStatus(
-      pageId ? "saved" : "idle",
-    );
-  }, [
-    clearDebounceTimer,
-    pageId,
-    performSave,
-  ]);
+    setStatus(pageId ? "saved" : "idle");
+  }, [clearDebounceTimer, pageId]);
 
   /*
-   * ==========================================================
-   * CTRL/CMD + S
-   * ==========================================================
+   * ========================================================
+   * CTRL / CMD + S
+   * ========================================================
    */
 
   useEffect(() => {
-    const handleKeyDown = (
-      event: KeyboardEvent,
-    ) => {
-      const target =
-        event.target as HTMLElement | null;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      /*
+       * ------------------------------------------------------
+       * Ignore inputs/textareas/contenteditable elements.
+       * ------------------------------------------------------
+       */
+
+      const target = event.target as HTMLElement | null;
 
       if (
         target?.tagName === "INPUT" ||
@@ -521,41 +701,42 @@ export function useCanvasPersistence({
         return;
       }
 
-      if (
-        !event.ctrlKey &&
-        !event.metaKey
-      ) {
+      /*
+       * ------------------------------------------------------
+       * Detect Ctrl + S / Cmd + S
+       * ------------------------------------------------------
+       */
+
+      if (!event.ctrlKey && !event.metaKey) {
         return;
       }
 
-      if (
-        event.key.toLowerCase() !== "s"
-      ) {
+      if (event.key.toLowerCase() !== "s") {
         return;
       }
+
+      /*
+       * ------------------------------------------------------
+       * Prevent browser save dialog
+       * ------------------------------------------------------
+       */
 
       event.preventDefault();
 
       void saveNow();
     };
 
-    window.addEventListener(
-      "keydown",
-      handleKeyDown,
-    );
+    window.addEventListener("keydown", handleKeyDown);
 
     return () => {
-      window.removeEventListener(
-        "keydown",
-        handleKeyDown,
-      );
+      window.removeEventListener("keydown", handleKeyDown);
     };
   }, [saveNow]);
 
   /*
-   * ==========================================================
+   * ========================================================
    * CLEANUP
-   * ==========================================================
+   * ========================================================
    */
 
   useEffect(() => {
@@ -565,9 +746,9 @@ export function useCanvasPersistence({
   }, [clearDebounceTimer]);
 
   /*
-   * ==========================================================
+   * ========================================================
    * RETURN
-   * ==========================================================
+   * ========================================================
    */
 
   return {
