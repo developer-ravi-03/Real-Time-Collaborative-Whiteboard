@@ -69,7 +69,69 @@ export const updateRoom = asyncHandler(async (req, res) => {
 });
 
 export const deleteRoom = asyncHandler(async (req, res) => {
-  await RoomService.deleteRoom(req.room.id);
+  const roomId = req.room.id;
+
+  /*
+   * IMPORTANT:
+   *
+   * Get members BEFORE deleting the room.
+   *
+   * After deletion the RoomMember rows may be removed
+   * through database cascade.
+   */
+  const memberUserIds = await RoomService.getRoomMemberUserIds(roomId);
+
+  /*
+   * Delete remains the source of truth.
+   */
+  await RoomService.deleteRoom(roomId);
+
+  /*
+   * Notify every connected session belonging to a member
+   * of the deleted room.
+   */
+  const io = req.app.get("io");
+
+  if (io) {
+    const sockets = await io.fetchSockets();
+
+    const memberUserIdSet = new Set(memberUserIds);
+
+    for (const clientSocket of sockets) {
+      const connectedUserId = clientSocket.user?.id;
+
+      if (!connectedUserId) {
+        continue;
+      }
+
+      if (!memberUserIdSet.has(connectedUserId)) {
+        continue;
+      }
+
+      /*
+       * Notify the client BEFORE removing its socket from
+       * the deleted room.
+       */
+      clientSocket.emit("room:deleted", {
+        roomId,
+
+        deletedBy: {
+          id: req.user.id,
+          displayName: req.user.displayName ?? null,
+        },
+      });
+
+      /*
+       * If this socket was inside the deleted room,
+       * remove it from the Socket.IO room as well.
+       */
+      if (clientSocket.currentRoomId === roomId) {
+        await clientSocket.leave(roomId);
+
+        clientSocket.currentRoomId = null;
+      }
+    }
+  }
 
   return res
     .status(200)

@@ -5,6 +5,8 @@ export const SOCKET_EVENTS = {
 
   ROOM_LEAVE: "room:leave",
 
+  ROOM_DELETED: "room:deleted",
+
   /* ---------------- Presence ---------------- */
 
   PRESENCE_GET: "presence:get",

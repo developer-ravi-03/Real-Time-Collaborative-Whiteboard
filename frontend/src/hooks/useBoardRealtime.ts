@@ -113,6 +113,19 @@ export type MemberRemovedChange = {
   };
 };
 
+export type RoomDeletedChange = {
+  roomId: string;
+  deletedBy?: {
+    id: string;
+    displayName?: string | null;
+  };
+};
+
+type RemoteRoomDeletedState = {
+  roomId: string;
+  change: RoomDeletedChange;
+};
+
 type MemberRemoveResponse = {
   success: boolean;
   message?: string;
@@ -183,6 +196,9 @@ export function useBoardRealtime(roomId: string | null) {
   const [remoteSessionState, setRemoteSessionState] =
     useState<RemoteSessionState | null>(null);
 
+  const [remoteRoomDeletedState, setRemoteRoomDeletedState] =
+    useState<RemoteRoomDeletedState | null>(null);
+
   /*
    * ========================================================
    * JOINED ROOM REF
@@ -242,6 +258,11 @@ export function useBoardRealtime(roomId: string | null) {
 
   const remoteSessionChange =
     remoteSessionState?.roomId === roomId ? remoteSessionState.change : null;
+
+  const remoteRoomDeleted =
+    remoteRoomDeletedState?.roomId === roomId
+      ? remoteRoomDeletedState.change
+      : null;
 
   /*
    * ========================================================
@@ -848,6 +869,36 @@ export function useBoardRealtime(roomId: string | null) {
       });
     };
 
+    const handleRoomDeleted = (change: RoomDeletedChange) => {
+      if (cancelled) {
+        return;
+      }
+
+      if (!change) {
+        return;
+      }
+
+      if (typeof change.roomId !== "string") {
+        console.warn("[Realtime] Ignoring invalid room deletion event.");
+
+        return;
+      }
+
+      if (change.roomId !== roomId) {
+        return;
+      }
+
+      setRemoteRoomDeletedState({
+        roomId,
+        change,
+      });
+
+      console.info("[Realtime] Room deleted:", {
+        roomId,
+        deletedBy: change.deletedBy?.id ?? "unknown",
+      });
+    };
+
     const handleSessionClosed = (data: {
       roomId: string;
       closedBy?: {
@@ -979,6 +1030,8 @@ export function useBoardRealtime(roomId: string | null) {
 
     socket.on("session:reopened", handleSessionReopened);
 
+    socket.on("room:deleted", handleRoomDeleted);
+
     /*
      * ======================================================
      * ALREADY CONNECTED
@@ -1026,6 +1079,8 @@ export function useBoardRealtime(roomId: string | null) {
       socket.off("session:closed", handleSessionClosed);
 
       socket.off("session:reopened", handleSessionReopened);
+
+      socket.off("room:deleted", handleRoomDeleted);
 
       /*
        * ----------------------------------------------------
@@ -1092,6 +1147,10 @@ export function useBoardRealtime(roomId: string | null) {
       setRemoteMemberRoleState((current) =>
         current?.roomId === roomId ? null : current,
       );
+
+      setRemoteRoomDeletedState((current) =>
+        current?.roomId === roomId ? null : current,
+      );
     };
   }, [roomId, isLoaded, isSignedIn]);
 
@@ -1133,6 +1192,8 @@ export function useBoardRealtime(roomId: string | null) {
 
     remoteMemberRemoved,
     remoteSessionChange,
+
+    remoteRoomDeleted,
 
     /*
      * Actions

@@ -71,11 +71,62 @@ export const updateMemberRole = asyncHandler(async (req, res) => {
 });
 
 export const removeMember = asyncHandler(async (req, res) => {
+  const roomId = req.room.id;
+
   const member = await RoomMemberService.removeMember(
-    req.room.id,
+    roomId,
     req.params.memberId,
     req.user.id,
   );
+
+  /*
+   * REST mutation is complete.
+   *
+   * Now notify connected sockets that belong to the removed
+   * user but are NOT currently inside the room.
+   *
+   * Room sockets are already handled by member.handler.js
+   * through the existing member:remove realtime flow.
+   */
+  const io = req.app.get("io");
+
+  if (io) {
+    const sockets = await io.fetchSockets();
+
+    for (const clientSocket of sockets) {
+      const connectedUserId = clientSocket.user?.id;
+
+      if (connectedUserId !== member.user.id) {
+        continue;
+      }
+
+      /*
+       * If the user is already inside the room, the existing
+       * member socket handler will handle the kick.
+       *
+       * If the user is on the dashboard or another page,
+       * notify that socket directly.
+       */
+      if (clientSocket.currentRoomId === roomId) {
+        continue;
+      }
+
+      clientSocket.emit("member:removed", {
+        roomId,
+
+        memberId: member.id,
+
+        userId: member.user.id,
+
+        kicked: true,
+
+        removedBy: {
+          id: req.user.id,
+          displayName: req.user.displayName ?? null,
+        },
+      });
+    }
+  }
 
   return res
     .status(200)

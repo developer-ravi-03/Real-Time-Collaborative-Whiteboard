@@ -195,6 +195,7 @@ export function CreateBoardModal({
             type="button"
             onClick={onSubmit}
             disabled={loading || !name.trim()}
+            // disabled={loading || name.trim().length < 3}
             className="
               h-11
               flex-1

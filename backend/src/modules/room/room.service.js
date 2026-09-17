@@ -311,6 +311,20 @@ class RoomService {
     return await this.getRoomDetails(roomId);
   }
 
+  async getRoomMemberUserIds(roomId) {
+    const memberships = await db.roomMember.findMany({
+      where: {
+        roomId,
+      },
+
+      select: {
+        userId: true,
+      },
+    });
+
+    return memberships.map((membership) => membership.userId);
+  }
+
   /**
    * Delete Room
    */

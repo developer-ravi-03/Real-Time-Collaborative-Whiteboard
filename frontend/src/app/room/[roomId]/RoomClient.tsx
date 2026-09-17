@@ -53,6 +53,7 @@ export default function RoomClient({ roomId }: RoomClientProps) {
     sendMemberRemove,
 
     remoteSessionChange,
+    remoteRoomDeleted,
   } = useBoardRealtime(roomId);
 
   const [showEditRoom, setShowEditRoom] = useState(false);
@@ -88,6 +89,9 @@ export default function RoomClient({ roomId }: RoomClientProps) {
   const [boardError, setBoardError] = useState<string | null>(null);
 
   const [showKickedNotification, setShowKickedNotification] = useState(false);
+
+  const [showRoomDeletedNotification, setShowRoomDeletedNotification] =
+    useState(false);
 
   const handleOpenEditRoom = () => {
     if (!room) return;
@@ -317,8 +321,15 @@ export default function RoomClient({ roomId }: RoomClientProps) {
   const handleCreateBoard = async () => {
     if (!room) return;
 
-    if (!boardName.trim()) {
+    const trimmedBoardName = boardName.trim();
+
+    if (!trimmedBoardName) {
       setBoardError("Board name is required.");
+      return;
+    }
+
+    if (trimmedBoardName.length < 3) {
+      setBoardError("Board name must be at least 3 characters.");
       return;
     }
 
@@ -332,14 +343,13 @@ export default function RoomClient({ roomId }: RoomClientProps) {
         {
           method: "POST",
           body: JSON.stringify({
-            name: boardName.trim(),
+            name: trimmedBoardName,
             description: boardDescription.trim() || undefined,
             type: boardType,
           }),
         },
       );
 
-      // Update current client immediately.
       setRoom((current) =>
         current
           ? {
@@ -349,7 +359,6 @@ export default function RoomClient({ roomId }: RoomClientProps) {
           : current,
       );
 
-      // Notify other clients about the successful REST mutation.
       sendBoardChange(response.data.id, "created");
 
       setBoardName("");
@@ -573,6 +582,25 @@ export default function RoomClient({ roomId }: RoomClientProps) {
   }, [remoteMemberRemoved, refreshRoom, router]);
 
   useEffect(() => {
+    if (!remoteRoomDeleted) {
+      return;
+    }
+
+    const notificationTimer = window.setTimeout(() => {
+      setShowRoomDeletedNotification(true);
+    }, 0);
+
+    const redirectTimer = window.setTimeout(() => {
+      router.replace("/dashboard");
+    }, 2200);
+
+    return () => {
+      window.clearTimeout(notificationTimer);
+      window.clearTimeout(redirectTimer);
+    };
+  }, [remoteRoomDeleted, router]);
+
+  useEffect(() => {
     if (!remoteSessionChange) {
       return;
     }
@@ -673,6 +701,57 @@ export default function RoomClient({ roomId }: RoomClientProps) {
 
   return (
     <>
+      {showRoomDeletedNotification && (
+        <div
+          className="
+      fixed
+      left-1/2
+      top-6
+      z-[9999]
+      w-[calc(100%-2rem)]
+      max-w-md
+      -translate-x-1/2
+      rounded-xl
+      border
+      border-red-500/30
+      bg-red-950
+      px-4
+      py-3
+      text-white
+      shadow-2xl
+    "
+          role="alert"
+          aria-live="assertive"
+        >
+          <div className="flex items-start gap-3">
+            <div
+              className="
+          mt-0.5
+          flex
+          h-8
+          w-8
+          shrink-0
+          items-center
+          justify-center
+          rounded-full
+          bg-red-500/20
+          text-red-300
+        "
+            >
+              !
+            </div>
+
+            <div className="min-w-0">
+              <p className="text-sm font-semibold">Room deleted</p>
+
+              <p className="mt-1 text-xs text-red-100/80">
+                This room has been deleted by the owner. Redirecting you to the
+                dashboard...
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
       {showKickedNotification && (
         <div
           className="
